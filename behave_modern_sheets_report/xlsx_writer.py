@@ -290,7 +290,7 @@ class XLSXWriter:
         """
         for col in ws.columns:
             max_len = 0
-            col_letter = col[0].column_letter  # type: ignore[union-attr]
+            col_letter = getattr(col[0], "column_letter", "")
             for cell in col:
                 value = cell.value
                 length = len(str(value)) if value is not None else 0

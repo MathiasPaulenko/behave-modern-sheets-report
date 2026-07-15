@@ -12,10 +12,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from odf.opendocument import OpenDocumentSpreadsheet  # type: ignore[import-untyped]
-from odf.style import Style, TableCellProperties, TextProperties  # type: ignore[import-untyped]
-from odf.table import Table, TableCell, TableRow  # type: ignore[import-untyped]
-from odf.text import P  # type: ignore[import-untyped]
+from odf.opendocument import OpenDocumentSpreadsheet
+from odf.style import Style, TableCellProperties, TextProperties
+from odf.table import Table, TableCell, TableRow
+from odf.text import P
 
 from .csv_writer import scenario_cell_value
 from .models import FeatureSummary, HistoryEntry, RunSummary, ScenarioResult

@@ -83,6 +83,14 @@ python_version = "3.11"
 strict = true
 warn_unused_configs = true
 
+[[tool.mypy.overrides]]
+module = "openpyxl.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "odf.*"
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]
