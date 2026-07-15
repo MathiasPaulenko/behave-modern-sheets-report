@@ -57,7 +57,7 @@ class TestCompleteRunPassing:
         c.start_feature(make_feature())
         c.start_scenario(make_scenario())
         c.start_step(make_step("passed"))
-        time.sleep(0.001)
+        time.sleep(0.01)
         c.end_step(make_step("passed"))
         c.end_scenario()
         c.end_feature()

@@ -302,7 +302,7 @@ class TestMonotonicSeconds:
 
     def test_returns_positive_float(self) -> None:
         start = time.monotonic()
-        time.sleep(0.001)
+        time.sleep(0.01)
         elapsed = monotonic_seconds(start)
         assert isinstance(elapsed, float)
         assert elapsed > 0
