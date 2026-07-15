@@ -14,7 +14,6 @@ from behave_modern_sheets_report.models import (
 )
 from behave_modern_sheets_report.utils import STATUS_PASSED
 
-
 # ---------------------------------------------------------------------------
 # Mock Behave objects (SimpleNamespace)
 # ---------------------------------------------------------------------------
@@ -43,9 +42,7 @@ def make_scenario_obj(
 ) -> SimpleNamespace:
     """Build a mock Behave scenario object."""
     location = (
-        SimpleNamespace(filename="features/login.feature", line=line)
-        if line is not None
-        else None
+        SimpleNamespace(filename="features/login.feature", line=line) if line is not None else None
     )
     rule = SimpleNamespace(name=rule_name) if rule_name else None
     ns = SimpleNamespace(

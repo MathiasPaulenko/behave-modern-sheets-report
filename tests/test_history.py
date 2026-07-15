@@ -362,9 +362,7 @@ class TestDeserializeNonNumericStrings:
         """Entry with non-numeric 'pass_rate' is skipped."""
         path = tmp_path / "history.json"
         path.write_text(
-            json.dumps(
-                [{"run_id": "bad", "pass_rate": "oops"}]
-            ),
+            json.dumps([{"run_id": "bad", "pass_rate": "oops"}]),
             encoding="utf-8",
         )
         hist = History(path=path)
@@ -374,9 +372,7 @@ class TestDeserializeNonNumericStrings:
         """Entry with non-numeric 'duration' is skipped."""
         path = tmp_path / "history.json"
         path.write_text(
-            json.dumps(
-                [{"run_id": "bad", "duration": "slow"}]
-            ),
+            json.dumps([{"run_id": "bad", "duration": "slow"}]),
             encoding="utf-8",
         )
         hist = History(path=path)

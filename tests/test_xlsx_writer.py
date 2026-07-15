@@ -9,8 +9,14 @@ from openpyxl import load_workbook
 from behave_modern_sheets_report.xlsx_writer import XLSXWriter
 from tests._helpers import (
     make_feature_summary as _make_feature,
+)
+from tests._helpers import (
     make_history_entry as _make_history_entry,
+)
+from tests._helpers import (
     make_run_summary as _make_run_summary,
+)
+from tests._helpers import (
     make_scenario_result as _make_scenario,
 )
 

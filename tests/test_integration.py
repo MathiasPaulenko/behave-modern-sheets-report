@@ -15,9 +15,9 @@ import sys
 from pathlib import Path
 
 import pytest
-from openpyxl import load_workbook
 from odf.opendocument import load as load_ods
 from odf.table import Table
+from openpyxl import load_workbook
 
 EXAMPLE_PROJECT = Path(__file__).resolve().parent.parent / "examples" / "behave_project"
 
@@ -150,9 +150,7 @@ class TestODSIntegration:
         assert output.exists(), "ODS report was not created"
 
         doc = load_ods(str(output))
-        table_names = {
-            t.getAttribute("name") for t in doc.spreadsheet.getElementsByType(Table)
-        }
+        table_names = {t.getAttribute("name") for t in doc.spreadsheet.getElementsByType(Table)}
         assert "Summary" in table_names
         assert "Details" in table_names
         assert "Trends" in table_names

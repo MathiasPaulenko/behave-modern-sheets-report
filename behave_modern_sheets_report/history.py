@@ -119,9 +119,7 @@ class History:
         try:
             tmp_path.write_text(self._serialize(data), encoding="utf-8")
         except PermissionError as exc:
-            raise PermissionError(
-                f"Cannot write history file {self._path}: {exc}"
-            ) from exc
+            raise PermissionError(f"Cannot write history file {self._path}: {exc}") from exc
         try:
             os.replace(tmp_path, self._path)
         except OSError:

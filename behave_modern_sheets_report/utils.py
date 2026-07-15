@@ -28,11 +28,26 @@ STATUS_UNTESTED = "untested"
 
 DEFAULT_COLUMNS: list[str] = ["feature", "scenario", "status", "duration", "tags", "error"]
 
-VALID_COLUMNS: frozenset[str] = frozenset({
-    "feature", "scenario", "status", "duration", "tags", "error",
-    "error_type", "traceback", "steps", "passed_steps", "failed_steps",
-    "skipped_steps", "file", "line", "rule", "is_outline",
-})
+VALID_COLUMNS: frozenset[str] = frozenset(
+    {
+        "feature",
+        "scenario",
+        "status",
+        "duration",
+        "tags",
+        "error",
+        "error_type",
+        "traceback",
+        "steps",
+        "passed_steps",
+        "failed_steps",
+        "skipped_steps",
+        "file",
+        "line",
+        "rule",
+        "is_outline",
+    }
+)
 
 _MAX_STR_LENGTH = 500
 

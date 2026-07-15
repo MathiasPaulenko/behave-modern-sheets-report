@@ -15,7 +15,11 @@ from behave_modern_sheets_report.utils import (
 )
 from tests._helpers import (
     make_feature_obj as make_feature,
+)
+from tests._helpers import (
     make_scenario_obj as make_scenario,
+)
+from tests._helpers import (
     make_step_obj as make_step,
 )
 

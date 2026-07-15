@@ -13,7 +13,6 @@ import sys
 from io import StringIO
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
 
 import pytest
 
@@ -48,13 +47,22 @@ from behave_modern_sheets_report.xlsx_formatter import XLSXFormatter
 from behave_modern_sheets_report.xlsx_writer import XLSXWriter
 from tests._helpers import (
     StreamOpener as _StreamOpener,
+)
+from tests._helpers import (
     make_feature_obj as _make_feature_obj,
+)
+from tests._helpers import (
     make_run_summary as _make_run_summary,
+)
+from tests._helpers import (
     make_scenario_obj as _make_scenario_obj,
+)
+from tests._helpers import (
     make_scenario_result as _make_scenario_result,
+)
+from tests._helpers import (
     make_step_obj as _make_step_obj,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -164,7 +172,12 @@ class TestCollectorChaos:
         assert rs.scenarios[0].step_count == 0
 
     def test_step_with_exception_fallback_attribute(self) -> None:
-        step = SimpleNamespace(name="step", status="failed", error=None, exception=ValueError("fallback"))
+        step = SimpleNamespace(
+            name="step",
+            status="failed",
+            error=None,
+            exception=ValueError("fallback"),
+        )
         c = Collector()
         c.start_feature(_make_feature_obj())
         c.start_scenario(_make_scenario_obj())
@@ -239,7 +252,7 @@ class TestHistoryChaos:
 
     def test_append_exactly_max_entries_no_truncation(self, tmp_path: Path) -> None:
         hist = History(path=tmp_path / "h.json", max_entries=3)
-        for i in range(3):
+        for _i in range(3):
             hist.append(_make_run_summary())
         loaded = hist.load()
         assert len(loaded) == 3
@@ -496,8 +509,7 @@ class TestCSVWriterChaos:
 
     def test_all_failed_scenarios(self) -> None:
         scenarios = [
-            _make_scenario_result(status=STATUS_FAILED, error_message=f"err{i}")
-            for i in range(5)
+            _make_scenario_result(status=STATUS_FAILED, error_message=f"err{i}") for i in range(5)
         ]
         run = _make_run_summary(scenarios=scenarios)
         stream = StringIO()
@@ -542,7 +554,8 @@ class TestCSVWriterChaos:
         run = _make_run_summary(scenarios=[scenario])
         stream = StringIO()
         CSVWriter.write(
-            run, stream,
+            run,
+            stream,
             columns=["steps", "passed_steps", "failed_steps", "skipped_steps"],
         )
         stream.seek(0)
@@ -566,8 +579,7 @@ class TestXLSXWriterChaos:
         from openpyxl import load_workbook
 
         scenarios = [
-            _make_scenario_result(status=STATUS_FAILED, error_message=f"err{i}")
-            for i in range(3)
+            _make_scenario_result(status=STATUS_FAILED, error_message=f"err{i}") for i in range(3)
         ]
         run = _make_run_summary(scenarios=scenarios)
         path = tmp_path / "report.xlsx"
@@ -580,9 +592,7 @@ class TestXLSXWriterChaos:
     def test_all_scenarios_skipped(self, tmp_path: Path) -> None:
         from openpyxl import load_workbook
 
-        scenarios = [
-            _make_scenario_result(status=STATUS_SKIPPED) for _ in range(3)
-        ]
+        scenarios = [_make_scenario_result(status=STATUS_SKIPPED) for _ in range(3)]
         run = _make_run_summary(scenarios=scenarios)
         path = tmp_path / "report.xlsx"
         XLSXWriter.write(run, path)
@@ -614,10 +624,7 @@ class TestXLSXWriterChaos:
     def test_many_trends_entries(self, tmp_path: Path) -> None:
         from openpyxl import load_workbook
 
-        trends = [
-            HistoryEntry(run_id=f"r{i}", pass_rate=float(i), passed=i)
-            for i in range(50)
-        ]
+        trends = [HistoryEntry(run_id=f"r{i}", pass_rate=float(i), passed=i) for i in range(50)]
         run = _make_run_summary()
         path = tmp_path / "report.xlsx"
         XLSXWriter.write(run, path, trends=trends)
@@ -691,8 +698,7 @@ class TestODSWriterChaos:
         from behave_modern_sheets_report.ods_writer import ODSWriter
 
         scenarios = [
-            _make_scenario_result(status=STATUS_FAILED, error_message=f"err{i}")
-            for i in range(3)
+            _make_scenario_result(status=STATUS_FAILED, error_message=f"err{i}") for i in range(3)
         ]
         run = _make_run_summary(scenarios=scenarios)
         path = tmp_path / "report.ods"
@@ -728,9 +734,7 @@ class TestODSWriterChaos:
 
         from behave_modern_sheets_report.ods_writer import ODSWriter
 
-        trends = [
-            HistoryEntry(run_id=f"r{i}", pass_rate=float(i)) for i in range(30)
-        ]
+        trends = [HistoryEntry(run_id=f"r{i}", pass_rate=float(i)) for i in range(30)]
         run = _make_run_summary()
         path = tmp_path / "report.ods"
         ODSWriter.write(run, path, trends=trends)

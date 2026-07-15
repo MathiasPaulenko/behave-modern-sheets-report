@@ -10,10 +10,20 @@ from openpyxl import load_workbook
 from behave_modern_sheets_report.xlsx_formatter import XLSXFormatter
 from tests._helpers import (
     StreamOpener as _StreamOpener,
+)
+from tests._helpers import (
     make_config as _make_config,
+)
+from tests._helpers import (
     make_feature_obj as _make_feature,
+)
+from tests._helpers import (
     make_scenario_obj as _make_scenario,
+)
+from tests._helpers import (
     make_step_obj as _make_step,
+)
+from tests._helpers import (
     run_full_cycle as _run_full_cycle,
 )
 
@@ -71,10 +81,12 @@ class TestClearHistory:
         output = tmp_path / "report.xlsx"
         history = tmp_path / "history.json"
         opener = _StreamOpener(name=str(output))
-        config = _make_config({
-            "report_history_path": str(history),
-            "report_clear_history": "true",
-        })
+        config = _make_config(
+            {
+                "report_history_path": str(history),
+                "report_clear_history": "true",
+            }
+        )
 
         for i in range(3):
             fmt = XLSXFormatter(opener, config)
@@ -117,10 +129,12 @@ class TestMaxHistory:
         output = tmp_path / "report.xlsx"
         history = tmp_path / "history.json"
         opener = _StreamOpener(name=str(output))
-        config = _make_config({
-            "report_history_path": str(history),
-            "report_max_history": "2",
-        })
+        config = _make_config(
+            {
+                "report_history_path": str(history),
+                "report_max_history": "2",
+            }
+        )
 
         for i in range(3):
             fmt = XLSXFormatter(opener, config)
@@ -143,10 +157,12 @@ class TestOnlyFailed:
         output = tmp_path / "report.xlsx"
         history = tmp_path / "history.json"
         opener = _StreamOpener(name=str(output))
-        config = _make_config({
-            "report_history_path": str(history),
-            "report_only_failed": "true",
-        })
+        config = _make_config(
+            {
+                "report_history_path": str(history),
+                "report_only_failed": "true",
+            }
+        )
         fmt = XLSXFormatter(opener, config)
 
         feature = _make_feature("Login")
@@ -232,10 +248,12 @@ class TestConfigOptions:
         output = tmp_path / "report.xlsx"
         history = tmp_path / "history.json"
         opener = _StreamOpener(name=str(output))
-        config = _make_config({
-            "report_history_path": str(history),
-            "report_columns": "feature,scenario,status",
-        })
+        config = _make_config(
+            {
+                "report_history_path": str(history),
+                "report_columns": "feature,scenario,status",
+            }
+        )
         fmt = XLSXFormatter(opener, config)
         assert fmt._columns == ["feature", "scenario", "status"]
 

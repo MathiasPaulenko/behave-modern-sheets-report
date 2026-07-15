@@ -9,9 +9,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from openpyxl import Workbook  # type: ignore[import-untyped]
-from openpyxl.styles import Font, PatternFill  # type: ignore[import-untyped]
-from openpyxl.worksheet.worksheet import Worksheet  # type: ignore[import-untyped]
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill
+from openpyxl.worksheet.worksheet import Worksheet
 
 from .csv_writer import scenario_cell_value
 from .models import FeatureSummary, HistoryEntry, RunSummary, ScenarioResult
@@ -117,16 +117,18 @@ class XLSXWriter:
         XLSXWriter._style_header(ws, len(_SUMMARY_HEADERS))
 
         for feature in features:
-            ws.append([
-                feature.feature_name,
-                feature.total_scenarios,
-                feature.passed,
-                feature.failed,
-                feature.skipped,
-                feature.undefined,
-                f"{feature.pass_rate:.1f}%",
-                format_duration(feature.duration),
-            ])
+            ws.append(
+                [
+                    feature.feature_name,
+                    feature.total_scenarios,
+                    feature.passed,
+                    feature.failed,
+                    feature.skipped,
+                    feature.undefined,
+                    f"{feature.pass_rate:.1f}%",
+                    format_duration(feature.duration),
+                ]
+            )
 
         if len(features) > 0:
             ws.auto_filter.ref = ws.dimensions
@@ -188,15 +190,17 @@ class XLSXWriter:
         for scenario in scenarios:
             if scenario.status != STATUS_FAILED:
                 continue
-            ws.append([
-                scenario.feature_name,
-                scenario.scenario_name,
-                scenario.error_message,
-                scenario.error_type,
-                scenario.traceback,
-                scenario.file,
-                scenario.line,
-            ])
+            ws.append(
+                [
+                    scenario.feature_name,
+                    scenario.scenario_name,
+                    scenario.error_message,
+                    scenario.error_type,
+                    scenario.traceback,
+                    scenario.file,
+                    scenario.line,
+                ]
+            )
 
         failed_count = sum(1 for s in scenarios if s.status == STATUS_FAILED)
         if failed_count > 0:
@@ -217,17 +221,19 @@ class XLSXWriter:
         XLSXWriter._style_header(ws, len(_TRENDS_HEADERS))
 
         for entry in trends:
-            ws.append([
-                entry.timestamp,
-                f"{entry.pass_rate:.1f}%",
-                entry.total_features,
-                entry.total_scenarios,
-                entry.passed,
-                entry.failed,
-                entry.skipped,
-                entry.undefined,
-                format_duration(entry.duration),
-            ])
+            ws.append(
+                [
+                    entry.timestamp,
+                    f"{entry.pass_rate:.1f}%",
+                    entry.total_features,
+                    entry.total_scenarios,
+                    entry.passed,
+                    entry.failed,
+                    entry.skipped,
+                    entry.undefined,
+                    format_duration(entry.duration),
+                ]
+            )
 
         ws.auto_filter.ref = ws.dimensions
         ws.freeze_panes = "A2"
@@ -284,7 +290,7 @@ class XLSXWriter:
         """
         for col in ws.columns:
             max_len = 0
-            col_letter = col[0].column_letter
+            col_letter = col[0].column_letter  # type: ignore[union-attr]
             for cell in col:
                 value = cell.value
                 length = len(str(value)) if value is not None else 0

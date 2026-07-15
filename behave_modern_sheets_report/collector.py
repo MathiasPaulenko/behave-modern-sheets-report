@@ -223,9 +223,7 @@ class Collector:
 
         for feature in self._features:
             feature_total = feature.total_scenarios
-            feature.pass_rate = (
-                feature.passed / feature_total * 100 if feature_total > 0 else 0.0
-            )
+            feature.pass_rate = feature.passed / feature_total * 100 if feature_total > 0 else 0.0
 
         return RunSummary(
             run_id=self.run_id,
