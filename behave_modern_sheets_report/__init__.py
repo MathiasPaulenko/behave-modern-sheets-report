@@ -20,12 +20,8 @@ from .csv_formatter import CSVFormatter
 from .csv_writer import CSVWriter
 from .history import History
 from .models import FeatureSummary, HistoryEntry, RunSummary, ScenarioResult
-from .ods_formatter import ODSFormatter
-from .ods_writer import ODSWriter
-from .xlsx_formatter import XLSXFormatter
-from .xlsx_writer import XLSXWriter
 
-__version__ = "1.0.1"
+__version__ = "1.1.0"
 
 __all__ = [
     "BaseSheetsFormatter",
@@ -35,11 +31,23 @@ __all__ = [
     "FeatureSummary",
     "History",
     "HistoryEntry",
-    "ODSFormatter",
-    "ODSWriter",
     "RunSummary",
     "ScenarioResult",
-    "XLSXFormatter",
-    "XLSXWriter",
     "__version__",
 ]
+
+try:
+    from .xlsx_formatter import XLSXFormatter
+    from .xlsx_writer import XLSXWriter
+
+    __all__ += ["XLSXFormatter", "XLSXWriter"]
+except ImportError:  # pragma: no cover
+    pass
+
+try:
+    from .ods_formatter import ODSFormatter
+    from .ods_writer import ODSWriter
+
+    __all__ += ["ODSFormatter", "ODSWriter"]
+except ImportError:  # pragma: no cover
+    pass

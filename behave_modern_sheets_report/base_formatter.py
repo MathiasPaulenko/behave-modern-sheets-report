@@ -64,7 +64,13 @@ class BaseSheetsFormatter(_BaseFormatter):  # type: ignore[misc]
         self._clear_history = parse_bool(userdata.get("report_clear_history"))
         self._history_path: str | None = userdata.get("report_history_path")
         max_history_raw = userdata.get("report_max_history")
-        self._max_history = int(max_history_raw) if max_history_raw else 100
+        try:
+            max_history = int(max_history_raw) if max_history_raw else 100
+        except (TypeError, ValueError):
+            max_history = 100
+        if max_history < 1:
+            max_history = 100
+        self._max_history = max_history
         self._closed = False
 
     def uri(self, uri: str) -> None:
@@ -83,11 +89,15 @@ class BaseSheetsFormatter(_BaseFormatter):  # type: ignore[misc]
         self._collector.start_feature(feature)
 
     def background(self, background: Any) -> None:
-        """Behave hook: background steps are handled via the scenario.
+        """Behave hook: background steps are about to run.
+
+        Tells the collector that subsequent steps belong to the background
+        so they can be counted separately.
 
         Args:
             background: A Behave ``Background`` object (or mock).
         """
+        self._collector.start_background(background)
 
     def rule(self, rule: Any) -> None:
         """Behave hook: a rule has started (Gherkin v6).

@@ -46,6 +46,10 @@ VALID_COLUMNS: frozenset[str] = frozenset(
         "line",
         "rule",
         "is_outline",
+        "feature_tags",
+        "background_steps",
+        "has_data_table",
+        "has_docstring",
     }
 )
 
@@ -268,7 +272,12 @@ def parse_columns(raw: str | None) -> list[str]:
     if raw is None or not raw.strip():
         return list(DEFAULT_COLUMNS)
     parsed = [col.strip() for col in raw.split(",") if col.strip()]
-    valid = [col for col in parsed if col in VALID_COLUMNS]
+    seen: set[str] = set()
+    valid: list[str] = []
+    for col in parsed:
+        if col in VALID_COLUMNS and col not in seen:
+            seen.add(col)
+            valid.append(col)
     if not valid:
         return list(DEFAULT_COLUMNS)
     return valid
@@ -333,6 +342,7 @@ __all__ = [
     "STATUS_SKIPPED",
     "STATUS_UNDEFINED",
     "STATUS_UNTESTED",
+    "VALID_COLUMNS",
     "format_duration",
     "generate_id",
     "monotonic_seconds",

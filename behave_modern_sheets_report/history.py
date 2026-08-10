@@ -65,7 +65,7 @@ class History:
         """
         try:
             raw = self._path.read_text(encoding="utf-8")
-        except (FileNotFoundError, PermissionError):
+        except OSError:
             return []
         if not raw.strip():
             return []
