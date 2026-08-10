@@ -21,7 +21,7 @@ from .csv_writer import CSVWriter
 from .history import History
 from .models import FeatureSummary, HistoryEntry, RunSummary, ScenarioResult
 
-__version__ = "1.1.0"
+__version__ = "1.1.1"
 
 __all__ = [
     "BaseSheetsFormatter",
