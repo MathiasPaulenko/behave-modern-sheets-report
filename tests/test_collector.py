@@ -579,3 +579,303 @@ class TestFeaturePassRate:
 
         assert rs.scenarios[0].status == STATUS_PASSED
         assert rs.scenarios[0].passed_steps == 1
+
+
+class TestFeatureTags:
+    """Tests for feature-level tag capture."""
+
+    def test_feature_tags_captured(self) -> None:
+        """Feature tags are stored in FeatureSummary and propagated to scenarios."""
+        c = Collector()
+        c.start_feature(make_feature("Login", tags=["smoke", "regression"]))
+        c.start_scenario(make_scenario("S1"))
+        c.start_step(make_step("passed"))
+        c.end_step(make_step("passed"))
+        c.end_scenario()
+        c.end_feature()
+        rs = c.finalize()
+
+        assert rs.features[0].tags == ["smoke", "regression"]
+        assert rs.scenarios[0].feature_tags == ["smoke", "regression"]
+
+    def test_feature_tags_empty_by_default(self) -> None:
+        """Feature without tags has empty tags list."""
+        c = Collector()
+        c.start_feature(make_feature("Login"))
+        c.start_scenario(make_scenario("S1"))
+        c.start_step(make_step("passed"))
+        c.end_step(make_step("passed"))
+        c.end_scenario()
+        c.end_feature()
+        rs = c.finalize()
+
+        assert rs.features[0].tags == []
+        assert rs.scenarios[0].feature_tags == []
+
+
+class TestBackgroundSteps:
+    """Tests for background step counting."""
+
+    def test_background_steps_counted(self) -> None:
+        """Background steps are counted separately from scenario steps."""
+        c = Collector()
+        c.start_feature(make_feature("Login"))
+        c.start_background(SimpleNamespace(name="Background"))
+        c.start_step(make_step("passed"))
+        c.end_step(make_step("passed"))
+        c.start_step(make_step("passed"))
+        c.end_step(make_step("passed"))
+        c.end_background()
+        c.start_scenario(make_scenario("S1"))
+        c.start_step(make_step("passed"))
+        c.end_step(make_step("passed"))
+        c.end_scenario()
+        c.end_feature()
+        rs = c.finalize()
+
+        assert rs.scenarios[0].background_steps == 2
+        assert rs.scenarios[0].step_count == 1
+
+    def test_no_background_steps(self) -> None:
+        """Scenario without background has background_steps=0."""
+        c = Collector()
+        c.start_feature(make_feature("Login"))
+        c.start_scenario(make_scenario("S1"))
+        c.start_step(make_step("passed"))
+        c.end_step(make_step("passed"))
+        c.end_scenario()
+        c.end_feature()
+        rs = c.finalize()
+
+        assert rs.scenarios[0].background_steps == 0
+
+
+class TestDataTable:
+    """Tests for data table detection."""
+
+    def test_step_with_table_sets_flag(self) -> None:
+        """A step with a table attribute sets has_data_table=True."""
+        c = Collector()
+        c.start_feature(make_feature())
+        c.start_scenario(make_scenario("S1"))
+        c.start_step(make_step("passed", table=SimpleNamespace(rows=[])))
+        c.end_step(make_step("passed", table=SimpleNamespace(rows=[])))
+        c.end_scenario()
+        c.end_feature()
+        rs = c.finalize()
+
+        assert rs.scenarios[0].has_data_table is True
+
+    def test_step_without_table_leaves_flag_false(self) -> None:
+        """Steps without tables leave has_data_table=False."""
+        c = Collector()
+        c.start_feature(make_feature())
+        c.start_scenario(make_scenario("S1"))
+        c.start_step(make_step("passed"))
+        c.end_step(make_step("passed"))
+        c.end_scenario()
+        c.end_feature()
+        rs = c.finalize()
+
+        assert rs.scenarios[0].has_data_table is False
+
+
+class TestDocString:
+    """Tests for docstring detection."""
+
+    def test_step_with_docstring_sets_flag(self) -> None:
+        """A step with a text attribute sets has_docstring=True."""
+        c = Collector()
+        c.start_feature(make_feature())
+        c.start_scenario(make_scenario("S1"))
+        c.start_step(make_step("passed", text="some docstring content"))
+        c.end_step(make_step("passed", text="some docstring content"))
+        c.end_scenario()
+        c.end_feature()
+        rs = c.finalize()
+
+        assert rs.scenarios[0].has_docstring is True
+
+    def test_step_without_docstring_leaves_flag_false(self) -> None:
+        """Steps without docstrings leave has_docstring=False."""
+        c = Collector()
+        c.start_feature(make_feature())
+        c.start_scenario(make_scenario("S1"))
+        c.start_step(make_step("passed"))
+        c.end_step(make_step("passed"))
+        c.end_scenario()
+        c.end_feature()
+        rs = c.finalize()
+
+        assert rs.scenarios[0].has_docstring is False
+
+
+class TestStartFeatureFinalizesScenario:
+    """Regression: start_feature must finalize in-progress scenario."""
+
+    def test_start_feature_finalizes_pending_scenario(self) -> None:
+        """Starting a new feature finalizes the previous in-progress scenario."""
+        c = Collector()
+        c.start_feature(make_feature("F1"))
+        c.start_scenario(make_scenario("S1"))
+        c.start_step(make_step("passed"))
+        c.end_step(make_step("passed"))
+        # Don't call end_scenario — start_feature should do it
+        c.start_feature(make_feature("F2"))
+        rs = c.finalize()
+
+        assert rs.scenarios[0].scenario_name == "S1"
+        assert rs.scenarios[0].status == STATUS_PASSED
+        assert rs.total_features == 2
+
+    def test_start_feature_resets_background_state(self) -> None:
+        """Starting a new feature resets _in_background and _background_step_count."""
+        c = Collector()
+        c.start_feature(make_feature("F1"))
+        c.start_background()
+        c.start_step(make_step("passed"))
+        c.end_step(make_step("passed"))
+        c.end_feature()
+        # Background state should not leak into the next feature
+        c.start_feature(make_feature("F2"))
+        c.start_scenario(make_scenario("S1"))
+        c.start_step(make_step("passed"))
+        c.end_step(make_step("passed"))
+        c.end_scenario()
+        c.end_feature()
+        rs = c.finalize()
+
+        assert rs.scenarios[0].background_steps == 0
+
+
+class TestStartScenarioInvalidLine:
+    """Regression: start_scenario handles non-numeric line values."""
+
+    def test_non_numeric_line_defaults_to_zero(self) -> None:
+        """A non-numeric line value defaults to 0 instead of crashing."""
+        c = Collector()
+        c.start_feature(make_feature())
+        scenario = make_scenario("S1", line=10)
+        # Override location with a non-numeric line
+        scenario.location = SimpleNamespace(filename="features/test.feature", line="not_a_number")
+        c.start_scenario(scenario)
+        c.end_scenario()
+        c.end_feature()
+        rs = c.finalize()
+
+        assert rs.scenarios[0].line == 0
+
+    def test_none_line_defaults_to_zero(self) -> None:
+        """A None line value defaults to 0 instead of crashing."""
+        c = Collector()
+        c.start_feature(make_feature())
+        scenario = make_scenario("S1", line=10)
+        scenario.location = SimpleNamespace(filename="features/test.feature", line=None)
+        c.start_scenario(scenario)
+        c.end_scenario()
+        c.end_feature()
+        rs = c.finalize()
+
+        assert rs.scenarios[0].line == 0
+
+
+class TestEndStepWithoutScenario:
+    """Regression: end_step resets state when scenario is None."""
+
+    def test_end_step_without_scenario_resets_state(self) -> None:
+        """end_step with no scenario resets _current_step so next start_step works."""
+        c = Collector()
+        c.start_feature(make_feature())
+        # Start a step without a scenario
+        c.start_step(make_step("passed"))
+        c.end_step(make_step("passed"))
+        # _current_step should be None now, so a second end_step is a no-op
+        c.end_step(make_step("passed"))
+        # Now start a scenario and step normally
+        c.start_scenario(make_scenario("S1"))
+        c.start_step(make_step("passed"))
+        c.end_step(make_step("passed"))
+        c.end_scenario()
+        c.end_feature()
+        rs = c.finalize()
+
+        assert rs.scenarios[0].step_count == 1
+        assert rs.scenarios[0].passed_steps == 1
+
+
+class TestFinalizeAutoFinalizes:
+    """Regression: finalize() finalizes pending scenario/feature for correct totals."""
+
+    def test_finalize_without_end_scenario(self) -> None:
+        """finalize() auto-finalizes a pending scenario so its status is counted."""
+        c = Collector()
+        c.start_feature(make_feature())
+        c.start_scenario(make_scenario("S1"))
+        c.start_step(make_step("passed"))
+        c.end_step(make_step("passed"))
+        # Deliberately skip end_scenario() and end_feature()
+        rs = c.finalize()
+
+        assert rs.total_scenarios == 1
+        assert rs.passed == 1
+        assert rs.failed == 0
+        assert rs.scenarios[0].status == STATUS_PASSED
+
+    def test_finalize_without_end_feature(self) -> None:
+        """finalize() auto-finalizes a pending feature so its duration is set."""
+        c = Collector()
+        c.start_feature(make_feature("F1"))
+        c.start_scenario(make_scenario("S1"))
+        c.start_step(make_step("passed"))
+        c.end_step(make_step("passed"))
+        c.end_scenario()
+        # Deliberately skip end_feature()
+        rs = c.finalize()
+
+        assert rs.total_features == 1
+        assert rs.features[0].total_scenarios == 1
+        assert rs.features[0].passed == 1
+
+    def test_finalize_without_any_end_calls(self) -> None:
+        """finalize() with no end calls still produces consistent totals."""
+        c = Collector()
+        c.start_feature(make_feature("F1"))
+        c.start_scenario(make_scenario("S1"))
+        c.start_step(make_step("failed"))
+        c.end_step(make_step("failed"))
+        # Skip all end calls
+        rs = c.finalize()
+
+        assert rs.total_scenarios == 1
+        assert rs.failed == 1
+        assert rs.passed == 0
+        assert rs.scenarios[0].status == STATUS_FAILED
+
+
+class TestDeriveScenarioStatusZeroSteps:
+    """Regression: scenario with zero steps is SKIPPED, not PASSED."""
+
+    def test_zero_step_scenario_is_skipped(self) -> None:
+        """A scenario with no steps (e.g. skipped via tags) gets STATUS_SKIPPED."""
+        c = Collector()
+        c.start_feature(make_feature())
+        c.start_scenario(make_scenario("S1"))
+        # No steps — simulate tag-skipped scenario
+        c.end_scenario()
+        c.end_feature()
+        rs = c.finalize()
+
+        assert rs.scenarios[0].status == STATUS_SKIPPED
+        assert rs.skipped == 1
+        assert rs.passed == 0
+
+    def test_zero_step_scenario_in_finalize(self) -> None:
+        """Zero-step scenario finalized via finalize() is also SKIPPED."""
+        c = Collector()
+        c.start_feature(make_feature())
+        c.start_scenario(make_scenario("S1"))
+        # No steps, no end_scenario — finalize auto-finalizes
+        rs = c.finalize()
+
+        assert rs.scenarios[0].status == STATUS_SKIPPED
+        assert rs.skipped == 1

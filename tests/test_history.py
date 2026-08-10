@@ -377,3 +377,16 @@ class TestDeserializeNonNumericStrings:
         )
         hist = History(path=path)
         assert hist.load() == []
+
+
+class TestLoadIsADirectory:
+    """Regression: load() catches OSError broadly, not just FileNotFoundError."""
+
+    def test_load_directory_returns_empty(self, tmp_path: Path) -> None:
+        """load() returns [] when path is a directory (IsADirectoryError)."""
+        dir_path = tmp_path / "subdir"
+        dir_path.mkdir()
+        hist = History(path=dir_path / "history.json")
+        # Create a directory where the file should be
+        (dir_path / "history.json").mkdir()
+        assert hist.load() == []

@@ -62,9 +62,11 @@ def make_scenario_obj(
 def make_step_obj(
     status: str = "passed",
     error: object | None = None,
+    table: object | None = None,
+    text: object | None = None,
 ) -> SimpleNamespace:
     """Build a mock Behave step object."""
-    return SimpleNamespace(name="step", status=status, error=error)
+    return SimpleNamespace(name="step", status=status, error=error, table=table, text=text)
 
 
 # ---------------------------------------------------------------------------
@@ -81,10 +83,12 @@ def make_feature_summary(
     undefined: int = 0,
     pass_rate: float = 66.7,
     duration: float = 1.234,
+    tags: list[str] | None = None,
 ) -> FeatureSummary:
     """Build a FeatureSummary with sensible defaults."""
     return FeatureSummary(
         feature_name=name,
+        tags=tags if tags is not None else [],
         total_scenarios=total,
         passed=passed,
         failed=failed,
@@ -102,6 +106,7 @@ def make_scenario_result(
     status: str = STATUS_PASSED,
     duration: float = 1.234,
     tags: list[str] | None = None,
+    feature_tags: list[str] | None = None,
     error_message: str = "",
     error_type: str = "",
     traceback: str = "",
@@ -113,6 +118,9 @@ def make_scenario_result(
     line: int = 10,
     rule: str = "",
     is_outline: bool = False,
+    background_steps: int = 0,
+    has_data_table: bool = False,
+    has_docstring: bool = False,
 ) -> ScenarioResult:
     """Build a ScenarioResult with sensible defaults."""
     return ScenarioResult(
@@ -121,6 +129,7 @@ def make_scenario_result(
         status=status,
         duration=duration,
         tags=tags if tags is not None else [],
+        feature_tags=feature_tags if feature_tags is not None else [],
         error_message=error_message,
         error_type=error_type,
         traceback=traceback,
@@ -132,6 +141,9 @@ def make_scenario_result(
         line=line,
         rule=rule,
         is_outline=is_outline,
+        background_steps=background_steps,
+        has_data_table=has_data_table,
+        has_docstring=has_docstring,
     )
 
 
@@ -177,19 +189,26 @@ def make_run_summary(
     the scenarios list if provided, otherwise sensible defaults are used.
     """
     if passed is None:
-        passed = sum(1 for s in (scenarios or []) if s.status == "passed") or 5
+        passed = sum(1 for s in scenarios if s.status == "passed") if scenarios is not None else 5
     if failed is None:
-        failed = sum(1 for s in (scenarios or []) if s.status == "failed") or 1
+        failed = sum(1 for s in scenarios if s.status == "failed") if scenarios is not None else 1
     if skipped is None:
-        skipped = sum(1 for s in (scenarios or []) if s.status == "skipped")
+        skipped = sum(1 for s in scenarios if s.status == "skipped") if scenarios is not None else 0
     if undefined is None:
-        undefined = sum(1 for s in (scenarios or []) if s.status == "undefined")
+        undefined = (
+            sum(1 for s in scenarios if s.status == "undefined") if scenarios is not None else 0
+        )
     if total_features is None:
-        total_features = len(features) if features else 2
+        total_features = len(features) if features is not None else 2
     if total_scenarios is None:
-        total_scenarios = len(scenarios) if scenarios else 6
+        total_scenarios = len(scenarios) if scenarios is not None else 6
     if pass_rate is None:
-        pass_rate = 100.0 if scenarios and all(s.status == "passed" for s in scenarios) else 83.33
+        if scenarios is None:
+            pass_rate = 83.33
+        elif len(scenarios) == 0:
+            pass_rate = 0.0
+        else:
+            pass_rate = 100.0 if all(s.status == "passed" for s in scenarios) else 0.0
 
     return RunSummary(
         run_id=run_id,

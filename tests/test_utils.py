@@ -12,6 +12,7 @@ from behave_modern_sheets_report.utils import (
     STATUS_SKIPPED,
     STATUS_UNDEFINED,
     STATUS_UNTESTED,
+    VALID_COLUMNS,
     format_duration,
     generate_id,
     monotonic_seconds,
@@ -209,6 +210,11 @@ class TestParseColumns:
         result = parse_columns("feature, bogus, status, fake")
         assert result == ["feature", "status"]
 
+    def test_duplicate_columns_removed(self) -> None:
+        """Duplicate column names are removed, keeping first occurrence order."""
+        result = parse_columns("feature, scenario, feature, status, scenario")
+        assert result == ["feature", "scenario", "status"]
+
 
 class TestParseDelimiter:
     """Tests for parse_delimiter."""
@@ -311,3 +317,18 @@ class TestMonotonicSeconds:
         start = time.monotonic()
         result = monotonic_seconds(start)
         assert isinstance(result, float)
+
+
+class TestColumnMapSync:
+    """Verify COLUMN_MAP and VALID_COLUMNS stay in sync."""
+
+    def test_column_map_keys_match_valid_columns(self) -> None:
+        """COLUMN_MAP keys must be exactly VALID_COLUMNS."""
+        from behave_modern_sheets_report.csv_writer import COLUMN_MAP
+
+        assert set(COLUMN_MAP.keys()) == set(VALID_COLUMNS)
+
+    def test_default_columns_are_valid(self) -> None:
+        """Every column in DEFAULT_COLUMNS must be in VALID_COLUMNS."""
+        for col in DEFAULT_COLUMNS:
+            assert col in VALID_COLUMNS, f"DEFAULT_COLUMN {col!r} not in VALID_COLUMNS"

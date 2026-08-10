@@ -62,7 +62,7 @@ class TestSummarySheet:
         XLSXWriter.write(run, path)
         wb = load_workbook(path)
         ws = wb["Summary"]
-        assert ws.cell(row=2, column=7).value == "85.5%"
+        assert ws.cell(row=2, column=8).value == "85.5%"
         wb.close()
 
     def test_summary_duration_formatted(self, tmp_path: Path) -> None:
@@ -73,7 +73,7 @@ class TestSummarySheet:
         XLSXWriter.write(run, path)
         wb = load_workbook(path)
         ws = wb["Summary"]
-        assert ws.cell(row=2, column=8).value == "1.234s"
+        assert ws.cell(row=2, column=9).value == "1.234s"
         wb.close()
 
 

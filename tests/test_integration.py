@@ -197,3 +197,45 @@ class TestHistoryAccumulation:
 
         data = json.loads(history_path.read_text(encoding="utf-8"))
         assert len(data) == 2
+
+
+# ---------------------------------------------------------------------------
+# Package import tests
+# ---------------------------------------------------------------------------
+
+
+class TestPackageImports:
+    """Verify package __init__ handles optional dependencies correctly."""
+
+    def test_core_imports_always_available(self) -> None:
+        """Core modules are importable without optional deps."""
+        import behave_modern_sheets_report as bsr
+
+        assert hasattr(bsr, "CSVFormatter")
+        assert hasattr(bsr, "Collector")
+        assert hasattr(bsr, "History")
+        assert hasattr(bsr, "RunSummary")
+        assert hasattr(bsr, "ScenarioResult")
+        assert hasattr(bsr, "__version__")
+
+    def test_xlsx_imports_available_when_openpyxl_installed(self) -> None:
+        """XLSX classes are importable when openpyxl is installed."""
+        try:
+            import openpyxl  # noqa: F401
+        except ImportError:
+            pytest.skip("openpyxl not installed")
+        import behave_modern_sheets_report as bsr
+
+        assert hasattr(bsr, "XLSXFormatter")
+        assert hasattr(bsr, "XLSXWriter")
+
+    def test_ods_imports_available_when_odfpy_installed(self) -> None:
+        """ODS classes are importable when odfpy is installed."""
+        try:
+            import odf  # noqa: F401
+        except ImportError:
+            pytest.skip("odfpy not installed")
+        import behave_modern_sheets_report as bsr
+
+        assert hasattr(bsr, "ODSFormatter")
+        assert hasattr(bsr, "ODSWriter")

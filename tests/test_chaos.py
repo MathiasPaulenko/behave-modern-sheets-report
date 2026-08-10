@@ -161,14 +161,14 @@ class TestCollectorChaos:
         assert rs.scenarios[0].failed_steps == 2
         assert "e1" in rs.scenarios[0].error_message
 
-    def test_scenario_with_zero_steps_is_passed(self) -> None:
+    def test_scenario_with_zero_steps_is_skipped(self) -> None:
         c = Collector()
         c.start_feature(_make_feature_obj())
         c.start_scenario(_make_scenario_obj())
         c.end_scenario()
         c.end_feature()
         rs = c.finalize()
-        assert rs.scenarios[0].status == STATUS_PASSED
+        assert rs.scenarios[0].status == STATUS_SKIPPED
         assert rs.scenarios[0].step_count == 0
 
     def test_step_with_exception_fallback_attribute(self) -> None:
@@ -800,7 +800,7 @@ class TestCSVFormatterChaos:
         reader = csv.DictReader(stream)
         rows = list(reader)
         assert len(rows) == 1
-        assert rows[0]["status"] == "passed"
+        assert rows[0]["status"] == "skipped"
 
     def test_scenario_auto_finalizes_previous(self) -> None:
         stream = StringIO()
@@ -933,11 +933,25 @@ class TestXLSXFormatterChaos:
         fmt = XLSXFormatter(opener, config)
         assert fmt._resolve_output_path() == "report.xlsx"
 
-    def test_max_history_invalid_string_raises(self, tmp_path: Path) -> None:
+    def test_max_history_invalid_string_falls_back(self, tmp_path: Path) -> None:
         opener = _StreamOpener(name=str(tmp_path / "report.xlsx"))
         config = SimpleNamespace(userdata={"report_max_history": "not_a_number"})
-        with pytest.raises(ValueError):
-            XLSXFormatter(opener, config)
+        fmt = XLSXFormatter(opener, config)
+        assert fmt._max_history == 100
+
+    def test_max_history_negative_falls_back(self, tmp_path: Path) -> None:
+        """Negative max_history value falls back to default 100."""
+        opener = _StreamOpener(name=str(tmp_path / "report.xlsx"))
+        config = SimpleNamespace(userdata={"report_max_history": "-5"})
+        fmt = XLSXFormatter(opener, config)
+        assert fmt._max_history == 100
+
+    def test_max_history_zero_falls_back(self, tmp_path: Path) -> None:
+        """Zero max_history value falls back to default 100."""
+        opener = _StreamOpener(name=str(tmp_path / "report.xlsx"))
+        config = SimpleNamespace(userdata={"report_max_history": "0"})
+        fmt = XLSXFormatter(opener, config)
+        assert fmt._max_history == 100
 
 
 # ---------------------------------------------------------------------------

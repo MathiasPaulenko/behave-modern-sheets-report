@@ -130,7 +130,7 @@ class TestSummarySheet:
         ODSWriter.write(run, path)
         doc = load(str(path))
         rows = _get_cell_texts(_get_tables(doc)["Summary"])
-        assert rows[1][6] == "85.5%"
+        assert rows[1][7] == "85.5%"
 
     def test_summary_duration_formatted(self, tmp_path: Path) -> None:
         """Duration is formatted with format_duration."""
@@ -140,7 +140,7 @@ class TestSummarySheet:
         ODSWriter.write(run, path)
         doc = load(str(path))
         rows = _get_cell_texts(_get_tables(doc)["Summary"])
-        assert rows[1][7] == "1.234s"
+        assert rows[1][8] == "1.234s"
 
 
 class TestDetailsSheet:
