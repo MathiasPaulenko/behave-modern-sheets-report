@@ -23,6 +23,7 @@ on:
       - "pyproject.toml"
       - "behave_modern_sheets_report/**"
       - ".github/workflows/release.yml"
+      - "CHANGELOG.md"
   workflow_dispatch:
 
 concurrency:
