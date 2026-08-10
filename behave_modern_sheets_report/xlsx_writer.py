@@ -31,6 +31,7 @@ _BOLD_FONT = Font(bold=True)
 
 _SUMMARY_HEADERS = [
     "Feature",
+    "Tags",
     "Total",
     "Passed",
     "Failed",
@@ -120,6 +121,7 @@ class XLSXWriter:
             ws.append(
                 [
                     feature.feature_name,
+                    ";".join(feature.tags),
                     feature.total_scenarios,
                     feature.passed,
                     feature.failed,

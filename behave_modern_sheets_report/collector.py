@@ -56,6 +56,8 @@ class Collector:
         self._feature_start: float | None = None
         self._scenario_start: float | None = None
         self._step_start: float | None = None
+        self._in_background: bool = False
+        self._background_step_count: int = 0
 
     # ------------------------------------------------------------------
     # Feature lifecycle
@@ -64,17 +66,24 @@ class Collector:
     def start_feature(self, behave_feature: Any) -> None:
         """Begin tracking a feature.
 
-        Finalizes the previous feature if one is in progress.
+        Finalizes the previous scenario and feature if either is in progress.
+        Resets background state so stale counts from a prior feature don't
+        leak into the new one.
 
         Args:
             behave_feature: A Behave ``Feature`` object (or mock).
         """
+        if self._current_scenario is not None:
+            self.end_scenario()
         if self._current_feature is not None:
             self.end_feature()
+        self._in_background = False
+        self._background_step_count = 0
         name = safe_str(getattr(behave_feature, "name", "")) or safe_str(
             getattr(behave_feature, "filename", "")
         )
-        feature = FeatureSummary(feature_name=name)
+        tags = safe_tags(getattr(behave_feature, "tags", None))
+        feature = FeatureSummary(feature_name=name, tags=tags)
         self._features.append(feature)
         self._current_feature = feature
         self._feature_start = time.monotonic()
@@ -92,6 +101,19 @@ class Collector:
         self._current_feature = None
         self._feature_start = None
 
+    def start_background(self, behave_background: Any | None = None) -> None:
+        """Mark that subsequent steps belong to the feature background.
+
+        Args:
+            behave_background: A Behave ``Background`` object (or mock).
+                May be ``None`` to simply toggle the flag.
+        """
+        self._in_background = True
+
+    def end_background(self) -> None:
+        """Mark the end of background steps."""
+        self._in_background = False
+
     # ------------------------------------------------------------------
     # Scenario lifecycle
     # ------------------------------------------------------------------
@@ -104,6 +126,7 @@ class Collector:
         """
         feature = self._current_feature
         feature_name = feature.feature_name if feature else ""
+        feature_tags = feature.tags if feature else []
 
         name = safe_str(getattr(behave_scenario, "name", ""))
         tags = safe_tags(getattr(behave_scenario, "tags", None))
@@ -113,7 +136,10 @@ class Collector:
         line = 0
         if location is not None:
             file_name = safe_str(getattr(location, "filename", ""))
-            line = int(getattr(location, "line", 0) or 0)
+            try:
+                line = int(getattr(location, "line", 0) or 0)
+            except (TypeError, ValueError):
+                line = 0
 
         rule_obj = getattr(behave_scenario, "rule", None)
         rule_name = ""
@@ -126,14 +152,17 @@ class Collector:
             feature_name=feature_name,
             scenario_name=name,
             tags=tags,
+            feature_tags=list(feature_tags),
             file=file_name,
             line=line,
             rule=rule_name,
             is_outline=is_outline,
+            background_steps=self._background_step_count,
         )
         self._scenarios.append(scenario)
         self._current_scenario = scenario
         self._scenario_start = time.monotonic()
+        self._background_step_count = 0
 
     def end_scenario(self) -> None:
         """Finalize the current scenario and derive its status from steps.
@@ -178,14 +207,27 @@ class Collector:
         Args:
             behave_step: A Behave ``Step`` object (or mock).
         """
+        if self._current_step is None:
+            return
+        if self._in_background:
+            self._background_step_count += 1
+            self._current_step = None
+            self._step_start = None
+            return
         scenario = self._current_scenario
-        if scenario is None or self._current_step is None:
+        if scenario is None:
+            self._current_step = None
+            self._step_start = None
             return
         raw_status = getattr(behave_step, "status", "")
         if hasattr(raw_status, "name"):
             raw_status = raw_status.name
         status = self._map_status(safe_str(raw_status))
         scenario.step_count += 1
+        if self._has_data_table(behave_step):
+            scenario.has_data_table = True
+        if self._has_docstring(behave_step):
+            scenario.has_docstring = True
         if status == STATUS_PASSED:
             scenario.passed_steps += 1
         elif status == STATUS_FAILED:
@@ -207,10 +249,20 @@ class Collector:
     def finalize(self) -> RunSummary:
         """Build and return the complete :class:`RunSummary`.
 
+        Finalizes any in-progress scenario and feature before computing
+        totals so that the returned summary is always consistent, even if
+        the caller did not explicitly call :meth:`end_scenario` or
+        :meth:`end_feature`.
+
         Returns:
             A :class:`RunSummary` with aggregated totals, pass rate, and
             all feature/scenario details.
         """
+        if self._current_scenario is not None:
+            self.end_scenario()
+        if self._current_feature is not None:
+            self.end_feature()
+
         end_time = now_iso()
         duration = monotonic_seconds(self._start_monotonic)
 
@@ -271,12 +323,30 @@ class Collector:
         """
         if scenario.failed_steps > 0:
             return STATUS_FAILED
-        if scenario.step_count > 0 and scenario.skipped_steps == scenario.step_count:
+        if scenario.step_count == 0:
+            return STATUS_SKIPPED
+        if scenario.skipped_steps == scenario.step_count:
             return STATUS_SKIPPED
         accounted = scenario.passed_steps + scenario.failed_steps + scenario.skipped_steps
-        if scenario.step_count > 0 and accounted < scenario.step_count:
+        if accounted < scenario.step_count:
             return STATUS_UNDEFINED
         return STATUS_PASSED
+
+    @staticmethod
+    def _has_data_table(behave_step: Any) -> bool:
+        """Check whether a step includes a Gherkin data table."""
+        table = getattr(behave_step, "table", None)
+        if table is not None:
+            return True
+        return getattr(behave_step, "data_table", None) is not None
+
+    @staticmethod
+    def _has_docstring(behave_step: Any) -> bool:
+        """Check whether a step includes a Gherkin docstring."""
+        text = getattr(behave_step, "text", None)
+        if text is not None and safe_str(text):
+            return True
+        return getattr(behave_step, "doc_string", None) is not None
 
     @staticmethod
     def _extract_error(behave_step: Any) -> tuple[str, str, str]:

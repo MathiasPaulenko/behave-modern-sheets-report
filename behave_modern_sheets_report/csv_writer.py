@@ -30,6 +30,10 @@ COLUMN_MAP: dict[str, str] = {
     "line": "line",
     "rule": "rule",
     "is_outline": "is_outline",
+    "feature_tags": "feature_tags",
+    "background_steps": "background_steps",
+    "has_data_table": "has_data_table",
+    "has_docstring": "has_docstring",
 }
 
 __all__ = ["COLUMN_MAP", "CSVWriter", "scenario_cell_value"]
@@ -48,6 +52,8 @@ def scenario_cell_value(scenario: ScenarioResult, col: str) -> str:
     field = COLUMN_MAP[col]
     if col == "tags":
         return ";".join(scenario.tags)
+    if col == "feature_tags":
+        return ";".join(scenario.feature_tags)
     if col == "duration":
         return format_duration(scenario.duration)
     if col == "error":
@@ -56,6 +62,10 @@ def scenario_cell_value(scenario: ScenarioResult, col: str) -> str:
         return scenario.error_message
     if col == "is_outline":
         return "true" if scenario.is_outline else "false"
+    if col == "has_data_table":
+        return "true" if scenario.has_data_table else "false"
+    if col == "has_docstring":
+        return "true" if scenario.has_docstring else "false"
     return str(getattr(scenario, field))
 
 

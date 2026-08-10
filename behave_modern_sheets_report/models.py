@@ -20,6 +20,7 @@ class ScenarioResult:
         status: Canonical status string (``passed``, ``failed``, ``skipped``, ``undefined``).
         duration: Execution time in seconds.
         tags: Scenario tags as a list of strings.
+        feature_tags: Feature-level tags as a list of strings.
         error_message: Error message if the scenario failed, empty otherwise.
         error_type: Exception type name if the scenario failed, empty otherwise.
         traceback: Full traceback string if the scenario failed, empty otherwise.
@@ -31,6 +32,9 @@ class ScenarioResult:
         line: Line number of the scenario in the feature file.
         rule: Gherkin rule name if the scenario belongs to a rule, empty otherwise.
         is_outline: Whether the scenario is a scenario outline example row.
+        background_steps: Number of background steps executed before this scenario.
+        has_data_table: Whether any step in the scenario includes a data table.
+        has_docstring: Whether any step in the scenario includes a docstring.
     """
 
     feature_name: str = ""
@@ -38,6 +42,7 @@ class ScenarioResult:
     status: str = ""
     duration: float = 0.0
     tags: list[str] = field(default_factory=list)
+    feature_tags: list[str] = field(default_factory=list)
     error_message: str = ""
     error_type: str = ""
     traceback: str = ""
@@ -49,6 +54,9 @@ class ScenarioResult:
     line: int = 0
     rule: str = ""
     is_outline: bool = False
+    background_steps: int = 0
+    has_data_table: bool = False
+    has_docstring: bool = False
 
 
 @dataclass(slots=True)
@@ -57,6 +65,7 @@ class FeatureSummary:
 
     Attributes:
         feature_name: Name of the feature.
+        tags: Feature-level tags as a list of strings.
         total_scenarios: Total number of scenarios in the feature.
         passed: Number of scenarios that passed.
         failed: Number of scenarios that failed.
@@ -67,6 +76,7 @@ class FeatureSummary:
     """
 
     feature_name: str = ""
+    tags: list[str] = field(default_factory=list)
     total_scenarios: int = 0
     passed: int = 0
     failed: int = 0

@@ -29,6 +29,7 @@ from .utils import (
 
 _SUMMARY_HEADERS = [
     "Feature",
+    "Tags",
     "Total",
     "Passed",
     "Failed",
@@ -131,6 +132,7 @@ class ODSWriter:
             row = TableRow()
             values = [
                 feature.feature_name,
+                ";".join(feature.tags),
                 str(feature.total_scenarios),
                 str(feature.passed),
                 str(feature.failed),
