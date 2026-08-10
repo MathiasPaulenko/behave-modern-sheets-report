@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "behave-modern-sheets-report"
-version = "1.0.1"
+version = "1.1.0"
 description = "Modern sheets report formatter for Behave that generates CSV, XLSX and ODS execution reports."
 readme = "README.md"
-license = { text = "MIT" }
+license = "MIT"
 requires-python = ">=3.11"
 authors = [
     { name = "Mathias Paulenko", email = "mathias.paulenko@outlook.com" },
@@ -27,7 +27,6 @@ keywords = [
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
@@ -39,6 +38,11 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = []
+
+[project.entry-points."behave.formatters"]
+csv-modern = "behave_modern_sheets_report.csv_formatter:CSVFormatter"
+xlsx-modern = "behave_modern_sheets_report.xlsx_formatter:XLSXFormatter"
+ods-modern = "behave_modern_sheets_report.ods_formatter:ODSFormatter"
 
 [project.optional-dependencies]
 behave = ["behave>=1.2.6"]
@@ -96,7 +100,10 @@ minversion = "8.0"
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "-ra --strict-markers"
-filterwarnings = ["error"]
+filterwarnings = [
+    "error",
+    "ignore:.*asyncio.get_event_loop_policy.*:DeprecationWarning",
+]
 
 [tool.coverage.run]
 branch = true

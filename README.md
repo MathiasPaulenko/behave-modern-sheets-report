@@ -87,7 +87,7 @@ pre-commit install
 
 ## Quick Start
 
-1. Register the formatters in your `behave.ini`:
+1. The formatters are registered as `behave.formatters` entry points, so they are discoverable by `behave-runner` and other tools automatically. If you use plain `behave`, register them in your `behave.ini`:
 
    ```ini
    [behave.formatters]
@@ -140,7 +140,7 @@ CSV reports produce a single flat file with one row per scenario (equivalent to 
 
 ## CLI Usage
 
-Register formatters in `behave.ini`:
+The formatters are registered as `behave.formatters` entry points in `pyproject.toml`, making them discoverable by `behave-runner` and compatible tools. When using plain `behave`, register them in `behave.ini`:
 
 ```ini
 [behave.formatters]
@@ -236,6 +236,10 @@ The `report_columns` option accepts any combination of the following column name
 | `line` | Line number in the feature file |
 | `rule` | Gherkin rule name (empty if none) |
 | `is_outline` | `true` if scenario outline example row, `false` otherwise |
+| `feature_tags` | Feature-level tags (semicolon-separated) |
+| `background_steps` | Number of background steps executed before the scenario |
+| `has_data_table` | `true` if any step includes a Gherkin data table |
+| `has_docstring` | `true` if any step includes a Gherkin docstring |
 
 **Default columns**: `feature,scenario,status,duration,tags,error`
 
