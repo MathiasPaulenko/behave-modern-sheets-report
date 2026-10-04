@@ -208,10 +208,10 @@ class ODSWriter:
                 scenario.error_type,
                 scenario.traceback,
                 scenario.file,
-                str(scenario.line),
             ]
             for value in values:
                 row.addElement(ODSWriter._text_cell(value))
+            row.addElement(ODSWriter._number_cell(scenario.line))
             table.addElement(row)
 
         doc.spreadsheet.addElement(table)
@@ -281,6 +281,20 @@ class ODSWriter:
             attrs["stylename"] = style_name
         cell = TableCell(**attrs)
         cell.addElement(P(text=value))
+        return cell
+
+    @staticmethod
+    def _number_cell(value: int | float) -> TableCell:
+        """Create a numeric cell, matching how XLSX writes numbers.
+
+        Args:
+            value: The numeric cell content.
+
+        Returns:
+            An ODF ``TableCell`` element with ``valuetype="float"``.
+        """
+        cell = TableCell(valuetype="float", value=value)
+        cell.addElement(P(text=str(value)))
         return cell
 
     @staticmethod
