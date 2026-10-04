@@ -42,7 +42,7 @@
 | 📊 | **Three output formats** | CSV (stdlib, zero dependencies), XLSX (via `openpyxl`), and ODS (via `odfpy`) |
 | 📑 | **Multi-sheet workbooks** | Summary, Details, Failures, and Trends sheets in XLSX and ODS |
 | 🎨 | **Conditional formatting** | Color-coded pass/fail cells for at-a-glance status reading |
-| 📈 | **Automatic trend history** | Every run is persisted to a JSON file and visualized in a Trends sheet |
+| 📈 | **Automatic trend history** | XLSX and ODS runs are persisted to a JSON file and visualized in a Trends sheet |
 | ⚙️ | **Configurable columns** | Choose which columns appear in the Details sheet via `userdata` |
 | 🔒 | **Atomic history writes** | Corruption-proof file I/O using temp file + `os.replace` |
 | ✅ | **100% test coverage** | Fully tested across Python 3.11, 3.12, 3.13, and 3.14 on Linux, Windows, and macOS |
@@ -87,7 +87,7 @@ pre-commit install
 
 ## Quick Start
 
-1. The formatters are registered as `behave.formatters` entry points, so they are discoverable by `behave-runner` and other tools automatically. If you use plain `behave`, register them in your `behave.ini`:
+1. Register the formatters in your `behave.ini` (or the `[behave.formatters]` section of `setup.cfg`/`tox.ini`):
 
    ```ini
    [behave.formatters]
@@ -103,6 +103,8 @@ pre-commit install
    ```
 
 3. Open `report.xlsx` in Excel, LibreOffice, or Google Sheets.
+
+A ready-to-run demo lives in [`examples/behave_project`](examples/behave_project) — it includes a `behave.ini` with the formatters already registered and features covering backgrounds, scenario outlines, and a failing step.
 
 ## Format Comparison
 
@@ -123,10 +125,10 @@ XLSX and ODS reports contain up to four sheets:
 
 | Sheet | Content | When present |
 | --- | --- | --- |
-| **Summary** | One row per feature with totals, pass rate, and duration | Always |
+| **Summary** | One row per feature: name, tags, scenario totals, pass rate, duration | Always |
 | **Details** | One row per scenario with configurable columns | Always |
 | **Failures** | Failed scenarios only — error message, type, traceback, file, line | Always (empty if no failures) |
-| **Trends** | Historical run entries with pass rate evolution over time | When history exists |
+| **Trends** | One row per recorded run: timestamp, pass rate, totals, duration | Always (one entry per run) |
 
 CSV reports produce a single flat file with one row per scenario (equivalent to the Details sheet).
 
@@ -138,9 +140,21 @@ CSV reports produce a single flat file with one row per scenario (equivalent to 
 | Failed | Red (`#FFC7CE`) |
 | Skipped | Yellow (`#FFEB9C`) |
 
+### Status mapping
+
+Behave statuses are normalized into canonical values:
+
+| Behave status | Reported as |
+| --- | --- |
+| `passed`, `xfailed`, `xpassed` | `passed` |
+| `failed`, `error`, `hook_error`, `cleanup_error` | `failed` |
+| `skipped` | `skipped` |
+| `undefined`, `pending` | `undefined` |
+| Anything else | `untested` |
+
 ## CLI Usage
 
-The formatters are registered as `behave.formatters` entry points in `pyproject.toml`, making them discoverable by `behave-runner` and compatible tools. When using plain `behave`, register them in `behave.ini`:
+Register the formatters in `behave.ini` (Behave does not discover entry points automatically):
 
 ```ini
 [behave.formatters]
@@ -163,13 +177,18 @@ Multiple formatters can be used simultaneously to produce all formats in a singl
 behave -f csv-modern -o report.csv -f xlsx-modern -o report.xlsx -f ods-modern -o report.ods
 ```
 
+If `-o` is omitted, CSV output goes to stdout and XLSX/ODS reports are written to `report.xlsx`/`report.ods` in the current directory.
+
 You can also set `userdata` options directly in `behave.ini`:
 
 ```ini
 [behave.userdata]
 report_columns = feature,scenario,status,duration,error
 report_only_failed = false
-report_max_history = 50
+report_delimiter = comma
+report_clear_history = false
+report_history_path = .behave-sheets-history.json
+report_max_history = 100
 ```
 
 ## Configuration Options
@@ -178,8 +197,8 @@ All options are passed via Behave's `userdata` (command-line `-D` or `behave.ini
 
 | Option | Type | Default | Description |
 |---|---|---|---|
-| `report_columns` | CSV string | `feature,scenario,status,duration,tags,error` | Columns shown in Details sheet |
-| `report_only_failed` | bool | `false` | Show only failed scenarios in Details |
+| `report_columns` | CSV string | `feature,scenario,status,duration,tags,error` | Columns shown in Details sheet / CSV rows |
+| `report_only_failed` | bool | `false` | Show only failed scenarios in Details / CSV |
 | `report_delimiter` | string | `comma` | CSV delimiter (`comma`, `semicolon`, `tab`) |
 | `report_clear_history` | bool | `false` | Clear history before appending current run |
 | `report_history_path` | string | `.behave-sheets-history.json` | Path to history JSON file |
@@ -222,13 +241,13 @@ The `report_columns` option accepts any combination of the following column name
 | --- | --- |
 | `feature` | Feature name |
 | `scenario` | Scenario name |
-| `status` | Scenario status (`passed`, `failed`, `skipped`, `undefined`) |
+| `status` | Scenario status (`passed`, `failed`, `skipped`, `undefined`; `untested` in dry runs) |
 | `duration` | Execution time (human-readable, e.g. `1.234s`, `12ms`) |
 | `tags` | Scenario tags (semicolon-separated) |
-| `error` | Error message with type if available (e.g. `AssertionError [...]`) |
+| `error` | Error message with type appended if available (e.g. `Something went wrong [AssertionError]`) |
 | `error_type` | Exception type name |
 | `traceback` | Full traceback string |
-| `steps` | Total step count |
+| `steps` | Total step count (including background steps) |
 | `passed_steps` | Number of passed steps |
 | `failed_steps` | Number of failed steps |
 | `skipped_steps` | Number of skipped steps |
@@ -241,11 +260,11 @@ The `report_columns` option accepts any combination of the following column name
 | `has_data_table` | `true` if any step includes a Gherkin data table |
 | `has_docstring` | `true` if any step includes a Gherkin docstring |
 
-**Default columns**: `feature,scenario,status,duration,tags,error`
+**Default columns**: `feature,scenario,status,duration,tags,error`. Unknown column names are ignored; if none of the given names is valid, the defaults are used.
 
 ## Automatic History & Trends
 
-Every run is automatically appended to a JSON history file (`.behave-sheets-history.json` by default). The history feeds the **Trends** sheet in XLSX and ODS reports, showing pass rate evolution across runs.
+Every XLSX and ODS run is automatically appended to a JSON history file (`.behave-sheets-history.json` in the working directory by default); CSV output does not record history. The history feeds the **Trends** sheet, showing pass rate evolution across runs.
 
 - **`report_history_path`** — custom location for the history file.
 - **`report_clear_history`** — clears all previous entries before appending the current run (useful for fresh starts).
@@ -286,8 +305,11 @@ from pathlib import Path
 collector = Collector()
 collector.start_feature(feature_obj)
 collector.start_scenario(scenario_obj)
-collector.start_step(step_obj)
-collector.end_step(step_obj)
+# Behave announces every step upfront, then reports one result per executed step
+for step in scenario_steps:
+    collector.start_step(step)
+for step in executed_steps:
+    collector.end_step(step)
 collector.end_scenario()
 collector.end_feature()
 run_summary = collector.finalize()

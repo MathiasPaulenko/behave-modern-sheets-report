@@ -5,11 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.1.1] - 2025-08-10
+## [Unreleased]
+
+### Fixed
+
+- **Critical:** scenario statuses and step counts were silently wrong. Behave announces every `step` upfront and fires `result` once per executed step, but the collector assumed alternating step/result pairs — only the first result per scenario was recorded, so failures beyond the first step were lost and scenarios were misreported as `passed`. The collector now queues announced steps and records every result.
+- Steps skipped after a failure (Behave emits no `result` for them) are now counted as `skipped` at scenario end instead of disappearing from the totals.
+- **Critical:** features using `Background:` reported every scenario as `skipped` with zero steps. The collector relied on an end-of-background event that Behave never emits, leaving its `_in_background` flag set forever. Background steps are now detected via `scenario.background_steps`, count toward `steps` and the status counters, and `background_steps` reports how many actually executed.
+- `has_data_table`/`has_docstring` now inspect every executed step, not only the first.
+- `BaseSheetsFormatter` now mirrors the `stream_opener`/`stream`/`config` attributes expected by `behave.formatter.base.Formatter` (so inherited helpers such as `stdout_mode` work), and `close()` closes the stream opener, fixing a file-handle leak in CSV output.
+- `safe_tags()` drops `None` items instead of producing a literal `"None"` tag, and accepts tuples/sets (e.g. Behave's `effective_tags`).
+- The example project's `environment.py` moved into `features/` — Behave only loads it from there.
+- The test suite now exercises the real Behave event ordering; new unit and integration regression tests cover failures in non-first steps and feature backgrounds.
+- Integration tests no longer fail to collect when `openpyxl`/`odfpy` are missing (optional imports guarded with `pytest.importorskip`).
+- Corrected documentation claims about automatic formatter discovery — Behave registers formatters only via the `[behave.formatters]` config section.
+- `SECURITY.md` supported versions updated for the `1.1.x` series (it still claimed `0.1.x` / pre-alpha).
+
+### Changed
+
+- `steps` now includes background steps (matching Behave's own step totals); `background_steps` reports the subset that are background steps.
+- `Collector.start_background()`/`end_background()` are deprecated no-ops kept for API compatibility.
+- Build requirement bumped to `setuptools>=77`, required for the SPDX `license` string.
+
+### Removed
+
+- `behave.formatters` entry points from `pyproject.toml` — Behave does not consume Python entry points for formatter discovery.
+
+## [1.1.1] - 2026-08-10
+
+### Fixed
+
+- Re-release of 1.1.0 as 1.1.1 because the `v1.1.0` tag already existed on the remote.
+- CI: added `CHANGELOG.md` to the release workflow trigger paths.
+
+## [1.1.0] - 2026-08-10
 
 ### Added
 
-- Entry points registered in `behave.formatters` group (`csv-modern`, `xlsx-modern`, `ods-modern`) for automatic discovery by `behave-runner` and compatible tools.
+- Entry points declared in the `behave.formatters` group (`csv-modern`, `xlsx-modern`, `ods-modern`). **Note:** Behave does not consume these entry points; they were removed in a later release. Register formatters via `[behave.formatters]` in your config.
 - Gherkin v6 coverage: feature-level tags (`feature_tags` column), background step count (`background_steps` column), data table detection (`has_data_table` column), and docstring detection (`has_docstring` column).
 - Tags column in Summary sheet for XLSX and ODS formats.
 
@@ -32,7 +65,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Test count increased from 386 to 413 with additional regression tests for all bug fixes.
 
-## [1.0.0] - 2025-07-15
+## [1.0.1] - 2026-08-06
+
+### Fixed
+
+- Added missing author email in `pyproject.toml`.
+
+## [1.0.0] - 2026-07-15
 
 ### Added
 
