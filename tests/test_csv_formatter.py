@@ -316,3 +316,17 @@ class TestEdgeCases:
         fmt = CSVFormatter(opener, config)
         fmt.close()
         assert "feature" in stream.buffer
+
+    def test_close_invokes_stream_opener_close(self) -> None:
+        """close() calls stream_opener.close() when available."""
+        stream = StringIO()
+        closed: list[bool] = []
+        opener = SimpleNamespace(
+            open=lambda: stream,
+            close=lambda: closed.append(True),
+        )
+        config = SimpleNamespace(userdata={})
+        fmt = CSVFormatter(opener, config)
+        fmt.close()
+        assert closed == [True]
+        assert "feature" in stream.getvalue()

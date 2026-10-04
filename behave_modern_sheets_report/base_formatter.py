@@ -49,6 +49,12 @@ class BaseSheetsFormatter(_BaseFormatter):  # type: ignore[misc]
             stream_opener: Behave stream opener for the report output.
             config: Behave configuration object with ``userdata`` dict.
         """
+        # Mirror the attributes behave.formatter.base.Formatter would set so
+        # that inherited helpers (e.g. ``stdout_mode``) work; ``super`` is not
+        # called because our constructor tolerates ``None`` arguments.
+        self.stream_opener = stream_opener
+        self.stream = getattr(stream_opener, "stream", None)
+        self.config = config
         self._stream_opener = stream_opener
         self._collector = Collector()
 
@@ -168,7 +174,12 @@ class BaseSheetsFormatter(_BaseFormatter):  # type: ignore[misc]
                 history.clear()
             trends = history.append(run_summary)
 
-        self._write_report(run_summary, trends)
+        try:
+            self._write_report(run_summary, trends)
+        finally:
+            closer = getattr(self._stream_opener, "close", None)
+            if callable(closer):
+                closer()
 
     def _resolve_output_path(self) -> str:
         """Resolve the output file path for the report.
