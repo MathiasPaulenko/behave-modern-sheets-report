@@ -356,13 +356,16 @@ class TestUtilsChaos:
         assert safe_tags([1, 2, 3]) == ["1", "2", "3"]
 
     def test_safe_tags_list_with_none(self) -> None:
-        assert safe_tags([None, "a", ""]) == ["None", "a"]
+        assert safe_tags([None, "a", ""]) == ["a"]
 
     def test_safe_tags_dict_returns_empty(self) -> None:
         assert safe_tags({"a": 1}) == []
 
-    def test_safe_tags_tuple_returns_empty(self) -> None:
-        assert safe_tags(("a", "b")) == []
+    def test_safe_tags_tuple_returns_tags(self) -> None:
+        assert safe_tags(("a", "b")) == ["a", "b"]
+
+    def test_safe_tags_set_returns_tags(self) -> None:
+        assert sorted(safe_tags({"a", "b"})) == ["a", "b"]
 
     def test_format_duration_very_large(self) -> None:
         result = format_duration(999999.999)

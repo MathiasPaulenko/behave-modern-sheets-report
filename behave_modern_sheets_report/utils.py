@@ -97,8 +97,9 @@ def safe_tags(value: object | None) -> list[str]:
 
     Returns:
         A list of tag strings. ``None`` returns ``[]``. A string is split by
-        commas and each part is stripped. A list is copied with each item
-        converted to a stripped string. Any other type returns ``[]``.
+        commas and each part is stripped. A list, tuple or set is copied with
+        each item converted to a stripped string; ``None`` items and empty
+        strings are dropped. Any other type returns ``[]``.
 
     Examples:
         >>> safe_tags(None)
@@ -107,13 +108,15 @@ def safe_tags(value: object | None) -> list[str]:
         ['smoke', 'auth']
         >>> safe_tags(["a", "b"])
         ['a', 'b']
+        >>> safe_tags([None, "a"])
+        ['a']
     """
     if value is None:
         return []
     if isinstance(value, str):
         return [part.strip() for part in value.split(",") if part.strip()]
-    if isinstance(value, list):
-        return [str(item).strip() for item in value if str(item).strip()]
+    if isinstance(value, list | tuple | set | frozenset):
+        return [text for item in value if item is not None and (text := str(item).strip())]
     return []
 
 
