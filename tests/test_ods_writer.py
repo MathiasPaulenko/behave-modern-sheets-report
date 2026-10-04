@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from odf.opendocument import load
 from odf.table import Table, TableCell, TableRow
@@ -23,15 +24,15 @@ from tests._helpers import (
 )
 
 
-def _get_tables(doc: object) -> dict[str, object]:
+def _get_tables(doc: Any) -> dict[str, Any]:
     """Extract tables from an ODS document keyed by name."""
-    tables: dict[str, object] = {}
+    tables: dict[str, Any] = {}
     for table in doc.spreadsheet.getElementsByType(Table):
         tables[table.getAttribute("name")] = table
     return tables
 
 
-def _get_cell_texts(table: object) -> list[list[str]]:
+def _get_cell_texts(table: Any) -> list[list[str]]:
     """Extract cell text values from a table as a 2D list."""
     rows: list[list[str]] = []
     for row in table.getElementsByType(TableRow):
