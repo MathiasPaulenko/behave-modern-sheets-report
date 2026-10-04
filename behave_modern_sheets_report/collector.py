@@ -31,10 +31,13 @@ from .utils import (
 class Collector:
     """Accumulates Behave events into a :class:`RunSummary`.
 
-    The collector is stateful. Create one per formatter run, feed it events
-    in order (``start_feature`` → ``start_scenario`` → ``start_step`` →
-    ``end_step`` → ``end_scenario`` → ``end_feature``), then call
-    :meth:`finalize` to obtain the complete :class:`RunSummary`.
+    The collector is stateful. Create one per formatter run and feed it
+    events in the order Behave produces them — ``start_feature``,
+    ``start_scenario``, then ``start_step`` for *every* step of the scenario
+    (announced upfront), ``end_step`` once per executed step, and finally
+    ``end_scenario``/``end_feature``. Steps that never produce a result are
+    counted as skipped. Call :meth:`finalize` to obtain the complete
+    :class:`RunSummary`.
 
     Attributes:
         run_id: Unique identifier generated at construction time.
@@ -51,13 +54,11 @@ class Collector:
 
         self._current_feature: FeatureSummary | None = None
         self._current_scenario: ScenarioResult | None = None
-        self._current_step: Any | None = None
 
         self._feature_start: float | None = None
         self._scenario_start: float | None = None
-        self._step_start: float | None = None
-        self._in_background: bool = False
-        self._background_step_count: int = 0
+        self._pending_steps: list[Any] = []
+        self._bg_step_ids: set[int] = set()
 
     # ------------------------------------------------------------------
     # Feature lifecycle
@@ -67,8 +68,6 @@ class Collector:
         """Begin tracking a feature.
 
         Finalizes the previous scenario and feature if either is in progress.
-        Resets background state so stale counts from a prior feature don't
-        leak into the new one.
 
         Args:
             behave_feature: A Behave ``Feature`` object (or mock).
@@ -77,8 +76,8 @@ class Collector:
             self.end_scenario()
         if self._current_feature is not None:
             self.end_feature()
-        self._in_background = False
-        self._background_step_count = 0
+        self._pending_steps.clear()
+        self._bg_step_ids.clear()
         name = safe_str(getattr(behave_feature, "name", "")) or safe_str(
             getattr(behave_feature, "filename", "")
         )
@@ -102,17 +101,16 @@ class Collector:
         self._feature_start = None
 
     def start_background(self, behave_background: Any | None = None) -> None:
-        """Mark that subsequent steps belong to the feature background.
+        """No-op kept for API compatibility.
 
-        Args:
-            behave_background: A Behave ``Background`` object (or mock).
-                May be ``None`` to simply toggle the flag.
+        Behave emits a single ``background`` notification per feature or rule,
+        before any scenario starts, and provides no end-of-background event —
+        so this flag cannot delimit background steps. They are detected
+        instead via ``scenario.background_steps`` in :meth:`start_scenario`.
         """
-        self._in_background = True
 
     def end_background(self) -> None:
-        """Mark the end of background steps."""
-        self._in_background = False
+        """No-op kept for API compatibility. See :meth:`start_background`."""
 
     # ------------------------------------------------------------------
     # Scenario lifecycle
@@ -124,6 +122,8 @@ class Collector:
         Args:
             behave_scenario: A Behave ``Scenario`` object (or mock).
         """
+        if self._current_scenario is not None:
+            self.end_scenario()
         feature = self._current_feature
         feature_name = feature.feature_name if feature else ""
         feature_tags = feature.tags if feature else []
@@ -148,6 +148,12 @@ class Collector:
 
         is_outline = bool(getattr(behave_scenario, "is_outline", False))
 
+        # Background steps are per-scenario copies in Behave >= 1.2.6.dev6;
+        # matching by identity lets us attribute their results to the scenario.
+        bg_steps = getattr(behave_scenario, "background_steps", None) or []
+        self._bg_step_ids = {id(step) for step in bg_steps}
+        self._pending_steps = []
+
         scenario = ScenarioResult(
             feature_name=feature_name,
             scenario_name=name,
@@ -157,21 +163,26 @@ class Collector:
             line=line,
             rule=rule_name,
             is_outline=is_outline,
-            background_steps=self._background_step_count,
         )
         self._scenarios.append(scenario)
         self._current_scenario = scenario
         self._scenario_start = time.monotonic()
-        self._background_step_count = 0
 
     def end_scenario(self) -> None:
         """Finalize the current scenario and derive its status from steps.
 
-        No-op if no scenario was started.
+        No-op if no scenario was started. Steps that were announced but never
+        produced a result (skipped after a failure, or in a skipped scenario)
+        are counted from their final model status before computing the status.
         """
         scenario = self._current_scenario
         if scenario is None:
+            self._pending_steps.clear()
             return
+        for pending_step in self._pending_steps:
+            self._record_step(scenario, pending_step, executed=False)
+        self._pending_steps.clear()
+        self._bg_step_ids.clear()
         assert self._scenario_start is not None
         scenario.duration = monotonic_seconds(self._scenario_start)
         scenario.status = self._derive_scenario_status(scenario)
@@ -193,37 +204,55 @@ class Collector:
     # ------------------------------------------------------------------
 
     def start_step(self, behave_step: Any) -> None:
-        """Register the start of a step within the current scenario.
+        """Register that a step was announced for the current scenario.
+
+        Behave notifies ``step`` for *all* steps of a scenario upfront, then
+        fires ``result`` once per executed step, so steps are queued here and
+        matched with their results in :meth:`end_step`.
 
         Args:
             behave_step: A Behave ``Step`` object (or mock).
         """
-        self._current_step = behave_step
-        self._step_start = time.monotonic()
+        self._pending_steps.append(behave_step)
 
     def end_step(self, behave_step: Any) -> None:
-        """Finalize the current step and accumulate counters.
+        """Record the result of a step in the current scenario.
+
+        No-op if no step was announced beforehand (defensive).
 
         Args:
-            behave_step: A Behave ``Step`` object (or mock).
+            behave_step: A Behave ``Step`` object (or mock) carrying the
+                final ``status``/``error`` information.
         """
-        if self._current_step is None:
+        if not self._pending_steps:
             return
-        if self._in_background:
-            self._background_step_count += 1
-            self._current_step = None
-            self._step_start = None
-            return
+        self._discard_pending(behave_step)
         scenario = self._current_scenario
         if scenario is None:
-            self._current_step = None
-            self._step_start = None
             return
+        self._record_step(scenario, behave_step, executed=True)
+
+    def _discard_pending(self, behave_step: Any) -> None:
+        """Remove a step from the pending queue, matching by identity."""
+        for index, pending_step in enumerate(self._pending_steps):
+            if pending_step is behave_step:
+                del self._pending_steps[index]
+                return
+        self._pending_steps.pop(0)
+
+    def _record_step(self, scenario: ScenarioResult, behave_step: Any, executed: bool) -> None:
+        """Accumulate counters and flags for a single step.
+
+        ``executed=False`` is used for steps that were announced but never
+        produced a result; those are not counted as executed background steps.
+        """
         raw_status = getattr(behave_step, "status", "")
         if hasattr(raw_status, "name"):
             raw_status = raw_status.name
         status = self._map_status(safe_str(raw_status))
         scenario.step_count += 1
+        if executed and id(behave_step) in self._bg_step_ids:
+            scenario.background_steps += 1
         if self._has_data_table(behave_step):
             scenario.has_data_table = True
         if self._has_docstring(behave_step):
@@ -239,8 +268,6 @@ class Collector:
                 scenario.traceback = traceback_str
         elif status == STATUS_SKIPPED:
             scenario.skipped_steps += 1
-        self._current_step = None
-        self._step_start = None
 
     # ------------------------------------------------------------------
     # Finalization

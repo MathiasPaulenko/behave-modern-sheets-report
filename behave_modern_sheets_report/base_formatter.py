@@ -89,15 +89,15 @@ class BaseSheetsFormatter(_BaseFormatter):  # type: ignore[misc]
         self._collector.start_feature(feature)
 
     def background(self, background: Any) -> None:
-        """Behave hook: background steps are about to run.
+        """Behave hook (deprecated upstream): a feature/rule background exists.
 
-        Tells the collector that subsequent steps belong to the background
-        so they can be counted separately.
+        Behave emits this once per feature or rule, before any scenario, and
+        provides no end-of-background event — so it cannot delimit background
+        steps. The collector detects them via ``scenario.background_steps``.
 
         Args:
             background: A Behave ``Background`` object (or mock).
         """
-        self._collector.start_background(background)
 
     def rule(self, rule: Any) -> None:
         """Behave hook: a rule has started (Gherkin v6).

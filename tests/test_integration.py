@@ -15,9 +15,6 @@ import sys
 from pathlib import Path
 
 import pytest
-from odf.opendocument import load as load_ods
-from odf.table import Table
-from openpyxl import load_workbook
 
 EXAMPLE_PROJECT = Path(__file__).resolve().parent.parent / "examples" / "behave_project"
 
@@ -97,6 +94,54 @@ class TestCSVIntegration:
         assert len(rows) >= 4, f"Expected at least 4 rows, got {len(rows)}"
         statuses = {r["status"] for r in rows}
         assert "passed" in statuses
+        assert "failed" in statuses
+
+    def test_csv_reports_real_statuses_and_step_counts(self, tmp_path: Path) -> None:
+        """Failed scenarios appear as failed and every executed step is counted."""
+        result = _run_behave(
+            tmp_path,
+            "csv-modern",
+            "report.csv",
+            extra_args=[
+                "-D",
+                "report_columns=feature,scenario,status,steps,passed_steps,failed_steps",
+            ],
+        )
+        assert result.returncode in (0, 1), f"behave failed: {result.stderr}"
+
+        with (tmp_path / "report.csv").open(encoding="utf-8") as f:
+            rows = list(csv.DictReader(f))
+
+        by_scenario = {r["scenario"]: r for r in rows}
+        search = by_scenario["Search for a product that does not exist"]
+        assert search["status"] == "failed"
+        assert int(search["steps"]) == 3
+        assert int(search["failed_steps"]) == 1
+        for row in rows:
+            assert int(row["steps"]) >= 1
+
+    def test_csv_background_steps_counted(self, tmp_path: Path) -> None:
+        """Background steps run per scenario and count toward step totals."""
+        result = _run_behave(
+            tmp_path,
+            "csv-modern",
+            "report.csv",
+            extra_args=[
+                "-D",
+                "report_columns=feature,scenario,status,steps,background_steps",
+            ],
+        )
+        assert result.returncode in (0, 1), f"behave failed: {result.stderr}"
+
+        with (tmp_path / "report.csv").open(encoding="utf-8") as f:
+            rows = list(csv.DictReader(f))
+
+        bg_rows = [r for r in rows if r["feature"] == "Shopping with an authenticated user"]
+        assert len(bg_rows) == 2
+        for row in bg_rows:
+            assert row["status"] == "passed"
+            assert int(row["background_steps"]) == 3
+            assert int(row["steps"]) == 5
 
 
 # ---------------------------------------------------------------------------
@@ -109,6 +154,9 @@ class TestXLSXIntegration:
 
     def test_xlsx_report_valid(self, tmp_path: Path) -> None:
         """XLSX report is a valid workbook with Summary and Details sheets."""
+        pytest.importorskip("openpyxl")
+        from openpyxl import load_workbook
+
         result = _run_behave(tmp_path, "xlsx-modern", "report.xlsx")
         assert result.returncode in (0, 1), f"behave failed: {result.stderr}"
 
@@ -123,6 +171,9 @@ class TestXLSXIntegration:
 
     def test_xlsx_trends_populated(self, tmp_path: Path) -> None:
         """Trends sheet has one entry after a single run."""
+        pytest.importorskip("openpyxl")
+        from openpyxl import load_workbook
+
         result = _run_behave(tmp_path, "xlsx-modern", "report.xlsx")
         assert result.returncode in (0, 1)
 
@@ -143,6 +194,10 @@ class TestODSIntegration:
 
     def test_ods_report_valid(self, tmp_path: Path) -> None:
         """ODS report is a valid document with Summary and Details tables."""
+        pytest.importorskip("odf.opendocument")
+        from odf.opendocument import load as load_ods
+        from odf.table import Table
+
         result = _run_behave(tmp_path, "ods-modern", "report.ods")
         assert result.returncode in (0, 1), f"behave failed: {result.stderr}"
 
@@ -166,6 +221,9 @@ class TestHistoryAccumulation:
 
     def test_two_runs_two_trends(self, tmp_path: Path) -> None:
         """Two consecutive XLSX runs produce two trend entries."""
+        pytest.importorskip("openpyxl")
+        from openpyxl import load_workbook
+
         project_dir = tmp_path / "project"
         shutil.copytree(EXAMPLE_PROJECT, project_dir)
 

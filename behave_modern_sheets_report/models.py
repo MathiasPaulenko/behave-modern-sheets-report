@@ -17,7 +17,8 @@ class ScenarioResult:
     Attributes:
         feature_name: Name of the parent feature.
         scenario_name: Name of the scenario.
-        status: Canonical status string (``passed``, ``failed``, ``skipped``, ``undefined``).
+        status: Canonical status string (``passed``, ``failed``, ``skipped``,
+            ``undefined``; ``untested`` in dry runs).
         duration: Execution time in seconds.
         tags: Scenario tags as a list of strings.
         feature_tags: Feature-level tags as a list of strings.

@@ -39,6 +39,7 @@ def make_scenario_obj(
     rule_name: str | None = None,
     status: str | None = None,
     error: object | None = None,
+    background_steps: list[SimpleNamespace] | None = None,
 ) -> SimpleNamespace:
     """Build a mock Behave scenario object."""
     location = (
@@ -51,6 +52,7 @@ def make_scenario_obj(
         location=location,
         rule=rule,
         is_outline=is_outline,
+        background_steps=background_steps if background_steps is not None else [],
     )
     if status is not None:
         ns.status = status
@@ -270,6 +272,9 @@ def run_full_cycle(
 ) -> None:
     """Run a complete Behave lifecycle through the formatter.
 
+    Mimics the real Behave 1.3 protocol: ``step`` is notified for every step
+    of a scenario upfront, and ``result`` is fired once per executed step.
+
     Args:
         formatter: The formatter instance.
         feature: Mock feature object.
@@ -279,8 +284,9 @@ def run_full_cycle(
     formatter.feature(feature)
     for scenario, steps in scenarios:
         formatter.scenario(scenario)
-        for step, result in steps:
+        for step, _ in steps:
             formatter.step(step)
+        for _, result in steps:
             formatter.result(result)
     formatter.eof()
     formatter.close()

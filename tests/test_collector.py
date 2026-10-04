@@ -614,27 +614,76 @@ class TestFeatureTags:
 
 
 class TestBackgroundSteps:
-    """Tests for background step counting."""
+    """Tests for background step counting via scenario.background_steps.
+
+    Behave 1.3 emits a single ``background`` notification per feature/rule
+    before any scenario and no end-of-background event. Each scenario
+    exposes its own copies of the background steps in
+    ``scenario.background_steps``, which the collector matches by identity.
+    """
 
     def test_background_steps_counted(self) -> None:
-        """Background steps are counted separately from scenario steps."""
+        """Background steps count as steps and as background_steps."""
+        bg1 = make_step("passed")
+        bg2 = make_step("passed")
+        own = make_step("passed")
+        scenario = make_scenario("S1", background_steps=[bg1, bg2])
         c = Collector()
         c.start_feature(make_feature("Login"))
-        c.start_background(SimpleNamespace(name="Background"))
-        c.start_step(make_step("passed"))
-        c.end_step(make_step("passed"))
-        c.start_step(make_step("passed"))
-        c.end_step(make_step("passed"))
-        c.end_background()
-        c.start_scenario(make_scenario("S1"))
-        c.start_step(make_step("passed"))
-        c.end_step(make_step("passed"))
+        c.start_scenario(scenario)
+        for step in (bg1, bg2, own):
+            c.start_step(step)
+        for step in (bg1, bg2, own):
+            c.end_step(step)
         c.end_scenario()
         c.end_feature()
         rs = c.finalize()
 
         assert rs.scenarios[0].background_steps == 2
-        assert rs.scenarios[0].step_count == 1
+        assert rs.scenarios[0].step_count == 3
+        assert rs.scenarios[0].passed_steps == 3
+        assert rs.scenarios[0].status == STATUS_PASSED
+
+    def test_failed_background_step_fails_scenario(self) -> None:
+        """A failed background step marks the scenario as failed."""
+        bg = make_step("failed", error=ValueError("bg boom"))
+        own = make_step("skipped")
+        scenario = make_scenario("S1", background_steps=[bg])
+        c = Collector()
+        c.start_feature(make_feature("Login"))
+        c.start_scenario(scenario)
+        c.start_step(bg)
+        c.start_step(own)
+        c.end_step(bg)  # Behave emits no result for steps skipped after a failure
+        c.end_scenario()
+        c.end_feature()
+        rs = c.finalize()
+
+        assert rs.scenarios[0].status == STATUS_FAILED
+        assert rs.scenarios[0].background_steps == 1
+        assert rs.scenarios[0].failed_steps == 1
+        assert rs.scenarios[0].skipped_steps == 1
+        assert rs.scenarios[0].step_count == 2
+        assert "bg boom" in rs.scenarios[0].error_message
+
+    def test_skipped_scenario_background_not_executed(self) -> None:
+        """A fully skipped scenario counts steps as skipped, background as 0."""
+        bg = make_step("skipped")
+        own = make_step("skipped")
+        scenario = make_scenario("S1", background_steps=[bg])
+        c = Collector()
+        c.start_feature(make_feature("Login"))
+        c.start_scenario(scenario)
+        c.start_step(bg)
+        c.start_step(own)
+        c.end_scenario()
+        c.end_feature()
+        rs = c.finalize()
+
+        assert rs.scenarios[0].status == STATUS_SKIPPED
+        assert rs.scenarios[0].background_steps == 0
+        assert rs.scenarios[0].step_count == 2
+        assert rs.scenarios[0].skipped_steps == 2
 
     def test_no_background_steps(self) -> None:
         """Scenario without background has background_steps=0."""
@@ -648,6 +697,113 @@ class TestBackgroundSteps:
         rs = c.finalize()
 
         assert rs.scenarios[0].background_steps == 0
+
+
+class TestRealBehaveProtocol:
+    """Regression tests for the real Behave 1.3 event ordering.
+
+    Behave notifies ``step`` for *all* steps of a scenario upfront, then
+    fires ``result`` once per executed step. Steps that never run (skipped
+    after a failure or in a skipped scenario) produce no ``result`` event.
+    """
+
+    def test_all_step_results_counted(self) -> None:
+        """Every result is recorded even though steps were announced upfront."""
+        steps = [make_step("passed") for _ in range(3)]
+        c = Collector()
+        c.start_feature(make_feature())
+        c.start_scenario(make_scenario("S1"))
+        for step in steps:
+            c.start_step(step)
+        for step in steps:
+            c.end_step(step)
+        c.end_scenario()
+        c.end_feature()
+        rs = c.finalize()
+
+        assert rs.scenarios[0].step_count == 3
+        assert rs.scenarios[0].passed_steps == 3
+        assert rs.scenarios[0].status == STATUS_PASSED
+
+    def test_late_failure_detected(self) -> None:
+        """A failure in a non-first step marks the scenario as failed."""
+        s1 = make_step("passed")
+        s2 = make_step("passed")
+        s3 = make_step("failed", error=ValueError("late boom"))
+        c = Collector()
+        c.start_feature(make_feature())
+        c.start_scenario(make_scenario("S1"))
+        for step in (s1, s2, s3):
+            c.start_step(step)
+        for step in (s1, s2, s3):
+            c.end_step(step)
+        c.end_scenario()
+        c.end_feature()
+        rs = c.finalize()
+
+        assert rs.scenarios[0].status == STATUS_FAILED
+        assert rs.scenarios[0].step_count == 3
+        assert rs.scenarios[0].passed_steps == 2
+        assert rs.scenarios[0].failed_steps == 1
+        assert "late boom" in rs.scenarios[0].error_message
+
+    def test_unexecuted_steps_flushed_as_skipped(self) -> None:
+        """Steps announced but never resulted are counted as skipped."""
+        s1 = make_step("passed")
+        s2 = make_step("failed", error=ValueError("boom"))
+        s3 = make_step("skipped")
+        c = Collector()
+        c.start_feature(make_feature())
+        c.start_scenario(make_scenario("S1"))
+        for step in (s1, s2, s3):
+            c.start_step(step)
+        c.end_step(s1)
+        c.end_step(s2)
+        c.end_scenario()
+        c.end_feature()
+        rs = c.finalize()
+
+        assert rs.scenarios[0].step_count == 3
+        assert rs.scenarios[0].skipped_steps == 1
+        assert rs.scenarios[0].status == STATUS_FAILED
+
+    def test_start_scenario_finalizes_previous(self) -> None:
+        """start_scenario without end_scenario finalizes the open scenario."""
+        c = Collector()
+        c.start_feature(make_feature())
+        c.start_scenario(make_scenario("S1"))
+        c.start_step(make_step("passed"))
+        c.end_step(make_step("passed"))
+        c.start_scenario(make_scenario("S2"))
+        c.start_step(make_step("failed", error=ValueError("x")))
+        c.end_step(make_step("failed", error=ValueError("x")))
+        c.end_scenario()
+        c.end_feature()
+        rs = c.finalize()
+
+        assert [s.scenario_name for s in rs.scenarios] == ["S1", "S2"]
+        assert rs.scenarios[0].status == STATUS_PASSED
+        assert rs.scenarios[1].status == STATUS_FAILED
+        assert rs.total_scenarios == 2
+
+    def test_results_matched_by_identity(self) -> None:
+        """Results are consumed for the exact step object Behave passes."""
+        s1 = make_step("passed")
+        s2 = make_step("skipped")
+        c = Collector()
+        c.start_feature(make_feature())
+        c.start_scenario(make_scenario("S1"))
+        c.start_step(s1)
+        c.start_step(s2)
+        c.end_step(s2)  # result arrives for the second step (first still pending)
+        c.end_step(s1)
+        c.end_scenario()
+        c.end_feature()
+        rs = c.finalize()
+
+        assert rs.scenarios[0].step_count == 2
+        assert rs.scenarios[0].passed_steps == 1
+        assert rs.scenarios[0].skipped_steps == 1
 
 
 class TestDataTable:
@@ -728,15 +884,15 @@ class TestStartFeatureFinalizesScenario:
         assert rs.scenarios[0].status == STATUS_PASSED
         assert rs.total_features == 2
 
-    def test_start_feature_resets_background_state(self) -> None:
-        """Starting a new feature resets _in_background and _background_step_count."""
+    def test_start_feature_resets_pending_state(self) -> None:
+        """Steps announced outside a scenario do not leak into the next feature."""
         c = Collector()
         c.start_feature(make_feature("F1"))
-        c.start_background()
+        c.start_background()  # deprecated no-op hook
         c.start_step(make_step("passed"))
         c.end_step(make_step("passed"))
         c.end_feature()
-        # Background state should not leak into the next feature
+        # Pending state should not leak into the next feature
         c.start_feature(make_feature("F2"))
         c.start_scenario(make_scenario("S1"))
         c.start_step(make_step("passed"))
@@ -783,13 +939,13 @@ class TestEndStepWithoutScenario:
     """Regression: end_step resets state when scenario is None."""
 
     def test_end_step_without_scenario_resets_state(self) -> None:
-        """end_step with no scenario resets _current_step so next start_step works."""
+        """end_step with no scenario consumes the pending step and does nothing."""
         c = Collector()
         c.start_feature(make_feature())
         # Start a step without a scenario
         c.start_step(make_step("passed"))
         c.end_step(make_step("passed"))
-        # _current_step should be None now, so a second end_step is a no-op
+        # The pending step was consumed, so a second end_step is a no-op
         c.end_step(make_step("passed"))
         # Now start a scenario and step normally
         c.start_scenario(make_scenario("S1"))
