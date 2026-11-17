@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2026-11-18
+
+### Fixed
+
+- **Security:** strings starting with `=` in scenario/feature names, tags or error messages are no longer stored as spreadsheet formulas in XLSX output — they are written as literal text (formula injection hardening).
+- XLSX writing no longer crashes with `IllegalCharacterError` when scenario data contains XML-illegal control characters; they are stripped, matching the new ODS sanitization that previously produced corrupted files.
+- A failure to persist run history (unwritable or locked history file) no longer prevents the report from being written — the formatter warns and continues without trend data.
+- Dry-run scenarios (all steps `untested`) are now reported as `untested` instead of `undefined`; unrecognized step statuses still report `undefined`.
+- `History` now accepts `str` paths, tolerates non-UTF-8 history files, skips entries with non-finite float values, clamps negative counts, and coerces non-integer `max_entries` values.
+- `parse_bool`, `parse_delimiter`, `parse_columns` and `normalize_status` no longer raise `AttributeError` on non-string userdata values.
+- Writers now validate `columns` upfront and raise `KeyError` before any output is produced (previously the CSV header row was written before failing).
+- ODS cell styles now declare `family="table-cell"` so spreadsheet applications actually apply them, and numeric summary/trend cells are written as numbers (matching XLSX output) instead of text.
+- Steps skipped after a failure on Behave < 1.3 are now counted: those versions emit no `step`/`result` events for skipped steps, so the collector reconciles announced steps against `scenario.all_steps` at scenario end.
+- `XLSXWriter.write()` and `ODSWriter.write()` now accept `str` paths in addition to `Path` objects.
+- `safe_str` and `safe_tags` no longer propagate exceptions raised by objects with a broken `__str__`.
+- Integration tests now run when `behave` is importable but not on `PATH`, and work without an installed package (repo root is added to `PYTHONPATH` for the behave subprocess).
+- `SECURITY.md` supported versions updated for the `1.2.x` series.
+
 ## [1.2.0] - 2026-10-04
 
 ### Fixed
