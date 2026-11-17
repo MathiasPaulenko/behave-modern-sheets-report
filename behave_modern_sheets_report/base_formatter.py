@@ -8,6 +8,7 @@ their writer class, default filename, and whether they use trend history.
 
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -68,7 +69,10 @@ class BaseSheetsFormatter(_BaseFormatter):  # type: ignore[misc]
         self._only_failed = parse_bool(userdata.get("report_only_failed"))
         self._delimiter = parse_delimiter(userdata.get("report_delimiter"))
         self._clear_history = parse_bool(userdata.get("report_clear_history"))
-        self._history_path: str | None = userdata.get("report_history_path")
+        history_path_raw = userdata.get("report_history_path")
+        self._history_path: str | None = (
+            str(history_path_raw) if history_path_raw is not None else None
+        )
         max_history_raw = userdata.get("report_max_history")
         try:
             max_history = int(max_history_raw) if max_history_raw else 100
@@ -168,11 +172,18 @@ class BaseSheetsFormatter(_BaseFormatter):  # type: ignore[misc]
 
         trends: list[HistoryEntry] = []
         if self._use_history:
-            history_path = Path(self._history_path) if self._history_path else None
-            history = History(path=history_path, max_entries=self._max_history)
-            if self._clear_history:
-                history.clear()
-            trends = history.append(run_summary)
+            try:
+                history_path = Path(self._history_path) if self._history_path else None
+                history = History(path=history_path, max_entries=self._max_history)
+                if self._clear_history:
+                    history.clear()
+                trends = history.append(run_summary)
+            except OSError as exc:
+                warnings.warn(
+                    f"Could not persist run history: {exc}",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
 
         try:
             self._write_report(run_summary, trends)

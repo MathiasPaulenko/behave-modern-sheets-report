@@ -36,7 +36,26 @@ COLUMN_MAP: dict[str, str] = {
     "has_docstring": "has_docstring",
 }
 
-__all__ = ["COLUMN_MAP", "CSVWriter", "scenario_cell_value"]
+
+def validate_columns(columns: list[str]) -> None:
+    """Raise ``KeyError`` if any column name is not in ``COLUMN_MAP``.
+
+    Called by writers before producing output so unknown column names fail
+    fast instead of surfacing mid-write (e.g. after the CSV header row is
+    already emitted).
+
+    Args:
+        columns: Column names to check.
+
+    Raises:
+        KeyError: If a column name is unknown.
+    """
+    unknown = [col for col in columns if col not in COLUMN_MAP]
+    if unknown:
+        raise KeyError(unknown[0])
+
+
+__all__ = ["COLUMN_MAP", "CSVWriter", "scenario_cell_value", "validate_columns"]
 
 
 def scenario_cell_value(scenario: ScenarioResult, col: str) -> str:
@@ -95,6 +114,7 @@ class CSVWriter:
             ``None``.  The CSV content is written directly to ``stream``.
         """
         cols = columns if columns is not None else DEFAULT_COLUMNS
+        validate_columns(cols)
         writer = csv.DictWriter(stream, fieldnames=cols, delimiter=delimiter)
         writer.writeheader()
 

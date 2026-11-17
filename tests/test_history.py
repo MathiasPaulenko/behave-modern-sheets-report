@@ -390,3 +390,65 @@ class TestLoadIsADirectory:
         # Create a directory where the file should be
         (dir_path / "history.json").mkdir()
         assert hist.load() == []
+
+
+class TestStringPath:
+    """Regression: History must accept str paths, not only Path objects."""
+
+    def test_str_path_accepted(self, tmp_path: Path) -> None:
+        hist = History(path=str(tmp_path / "history.json"))
+        assert hist.load() == []
+        entries = hist.append(make_run_summary())
+        assert len(entries) == 1
+        assert len(hist.load()) == 1
+
+
+class TestInvalidEncoding:
+    """Regression: non-UTF8 history files load as empty instead of crashing."""
+
+    def test_non_utf8_file_returns_empty(self, tmp_path: Path) -> None:
+        path = tmp_path / "history.json"
+        path.write_bytes(b"\xff\xfe\x00\x01garbage")
+        assert History(path=path).load() == []
+
+
+class TestCorruptNumericValues:
+    """Regression: corrupt entries are dropped or clamped on load."""
+
+    def test_non_finite_floats_skip_entry(self, tmp_path: Path) -> None:
+        path = tmp_path / "history.json"
+        path.write_text(
+            json.dumps([{"run_id": "x", "pass_rate": "nan", "duration": "inf"}]),
+            encoding="utf-8",
+        )
+        assert History(path=path).load() == []
+
+    def test_negative_counts_clamped(self, tmp_path: Path) -> None:
+        path = tmp_path / "history.json"
+        path.write_text(
+            json.dumps([{"run_id": "x", "passed": -5, "total_scenarios": -1, "pass_rate": 150.0}]),
+            encoding="utf-8",
+        )
+        entries = History(path=path).load()
+        assert len(entries) == 1
+        assert entries[0].passed == 0
+        assert entries[0].total_scenarios == 0
+        assert entries[0].pass_rate == 100.0
+
+
+class TestMaxEntriesCoercion:
+    """Regression: non-int max_entries must not crash on append slicing."""
+
+    def test_float_coerced_to_int(self, tmp_path: Path) -> None:
+        hist = History(path=tmp_path / "h.json", max_entries=2.9)
+        for _ in range(5):
+            hist.append(make_run_summary())
+        assert len(hist.load()) == 2
+
+    def test_string_coerced_to_int(self, tmp_path: Path) -> None:
+        hist = History(path=tmp_path / "h.json", max_entries="3")
+        assert hist._max_entries == 3
+
+    def test_non_numeric_raises_value_error(self, tmp_path: Path) -> None:
+        with pytest.raises(ValueError, match="integer"):
+            History(path=tmp_path / "h.json", max_entries="abc")

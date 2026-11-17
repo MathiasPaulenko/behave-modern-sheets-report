@@ -8,7 +8,9 @@ with a real Behave run.
 from __future__ import annotations
 
 import csv
+import importlib.util
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -19,8 +21,8 @@ import pytest
 EXAMPLE_PROJECT = Path(__file__).resolve().parent.parent / "examples" / "behave_project"
 
 pytestmark = pytest.mark.skipif(
-    shutil.which("behave") is None,
-    reason="behave CLI not installed",
+    importlib.util.find_spec("behave") is None,
+    reason="behave package not installed",
 )
 
 
@@ -42,7 +44,7 @@ def _run_behave(
         The completed process result.
     """
     project_dir = tmp_path / "project"
-    shutil.copytree(EXAMPLE_PROJECT, project_dir)
+    shutil.copytree(EXAMPLE_PROJECT, project_dir, dirs_exist_ok=True)
 
     output_path = tmp_path / output_file
     history_path = tmp_path / "history.json"
@@ -62,12 +64,17 @@ def _run_behave(
         cmd.extend(extra_args)
     cmd.append("features")
 
+    env = dict(os.environ)
+    repo_root = str(EXAMPLE_PROJECT.parent.parent)
+    env["PYTHONPATH"] = repo_root + os.pathsep + env.get("PYTHONPATH", "")
+
     return subprocess.run(
         cmd,
         capture_output=True,
         text=True,
         timeout=60,
         cwd=str(project_dir),
+        env=env,
     )
 
 
@@ -224,28 +231,11 @@ class TestHistoryAccumulation:
         pytest.importorskip("openpyxl")
         from openpyxl import load_workbook
 
-        project_dir = tmp_path / "project"
-        shutil.copytree(EXAMPLE_PROJECT, project_dir)
-
         history_path = tmp_path / "history.json"
         output_path = tmp_path / "report.xlsx"
 
         for _ in range(2):
-            cmd = [
-                sys.executable,
-                "-m",
-                "behave",
-                "-f",
-                "xlsx-modern",
-                "-o",
-                str(output_path),
-                "--no-color",
-                f"-D report_history_path={history_path}",
-                "features",
-            ]
-            result = subprocess.run(
-                cmd, capture_output=True, text=True, timeout=60, cwd=str(project_dir)
-            )
+            result = _run_behave(tmp_path, "xlsx-modern", "report.xlsx")
             assert result.returncode in (0, 1)
 
         wb = load_workbook(output_path)

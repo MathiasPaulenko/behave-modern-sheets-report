@@ -8,6 +8,7 @@ parsing of user-supplied configuration values.
 from __future__ import annotations
 
 import math
+import re
 import time
 import uuid
 from datetime import UTC, datetime
@@ -82,7 +83,10 @@ def safe_str(value: object | None) -> str:
     """
     if value is None:
         return ""
-    text = str(value).strip()
+    try:
+        text = str(value).strip()
+    except Exception:
+        return ""
     if len(text) > _MAX_STR_LENGTH:
         return text[:_MAX_STR_LENGTH] + "..."
     return text
@@ -116,8 +120,41 @@ def safe_tags(value: object | None) -> list[str]:
     if isinstance(value, str):
         return [part.strip() for part in value.split(",") if part.strip()]
     if isinstance(value, list | tuple | set | frozenset):
-        return [text for item in value if item is not None and (text := str(item).strip())]
+        tags: list[str] = []
+        for item in value:
+            if item is None:
+                continue
+            text = safe_str(item)
+            if text:
+                tags.append(text)
+        return tags
     return []
+
+
+_ILLEGAL_XML_CHARS_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\ud800-\udfff\ufffe\uffff]")
+
+
+def sanitize_xml_text(value: str) -> str:
+    """Remove characters that are illegal in XML 1.0 documents.
+
+    Spreadsheet formats (XLSX, ODS) are XML-based and reject control
+    characters outside the XML 1.0 legal range — openpyxl raises
+    ``IllegalCharacterError`` and odfpy produces corrupt files. Stripping
+    them keeps reports writable for arbitrary scenario/step content.
+
+    Args:
+        value: The string to sanitize.
+
+    Returns:
+        The string with every XML-illegal character removed.
+
+    Examples:
+        >>> sanitize_xml_text("ok")
+        'ok'
+        >>> sanitize_xml_text("bad\\x0bname")
+        'badname'
+    """
+    return _ILLEGAL_XML_CHARS_RE.sub("", value)
 
 
 # ---------------------------------------------------------------------------
@@ -210,7 +247,7 @@ def normalize_status(behave_status: str | None) -> str:
         >>> normalize_status("unknown")
         'untested'
     """
-    if behave_status is None:
+    if not isinstance(behave_status, str):
         return STATUS_UNTESTED
     status = behave_status.lower().strip()
     if status in (STATUS_PASSED, "xfailed", "xpassed"):
@@ -272,7 +309,7 @@ def parse_columns(raw: str | None) -> list[str]:
         >>> parse_columns("feature, bogus")
         ['feature']
     """
-    if raw is None or not raw.strip():
+    if not isinstance(raw, str) or not raw.strip():
         return list(DEFAULT_COLUMNS)
     parsed = [col.strip() for col in raw.split(",") if col.strip()]
     seen: set[str] = set()
@@ -304,7 +341,7 @@ def parse_delimiter(raw: str | None) -> str:
         >>> parse_delimiter("tab")
         '\\t'
     """
-    if raw is None:
+    if not isinstance(raw, str):
         return ","
     value = raw.lower().strip()
     if value == "comma":
@@ -334,6 +371,8 @@ def parse_bool(raw: str | None) -> bool:
     """
     if raw is None:
         return False
+    if not isinstance(raw, str):
+        return bool(raw)
     value = raw.lower().strip()
     return value in ("true", "1", "yes")
 
@@ -355,5 +394,6 @@ __all__ = [
     "parse_columns",
     "parse_delimiter",
     "safe_str",
+    "sanitize_xml_text",
     "safe_tags",
 ]

@@ -7,13 +7,14 @@ package (installed via the ``[xlsx]`` extra).
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill
 from openpyxl.worksheet.worksheet import Worksheet
 
-from .csv_writer import scenario_cell_value
+from .csv_writer import scenario_cell_value, validate_columns
 from .models import FeatureSummary, HistoryEntry, RunSummary, ScenarioResult
 from .utils import (
     DEFAULT_COLUMNS,
@@ -21,6 +22,7 @@ from .utils import (
     STATUS_PASSED,
     STATUS_SKIPPED,
     format_duration,
+    sanitize_xml_text,
 )
 
 _FILL_PASSED = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
@@ -72,7 +74,7 @@ class XLSXWriter:
     @staticmethod
     def write(
         run_summary: RunSummary,
-        path: Path,
+        path: Path | str,
         columns: list[str] | None = None,
         only_failed: bool = False,
         trends: list[HistoryEntry] | None = None,
@@ -90,7 +92,9 @@ class XLSXWriter:
             trends: Historical run entries for the Trends sheet.  When
                 ``None`` or empty, the Trends sheet is omitted.
         """
+        path = Path(path)
         cols = columns if columns is not None else DEFAULT_COLUMNS
+        validate_columns(cols)
         wb = Workbook()
 
         XLSXWriter._write_summary(wb, run_summary.features)
@@ -99,8 +103,8 @@ class XLSXWriter:
         if trends is not None and len(trends) > 0:
             XLSXWriter._write_trends(wb, trends)
 
-        default_sheet = wb["Sheet"]
-        wb.remove(default_sheet)
+        if "Sheet" in wb.sheetnames:
+            wb.remove(wb["Sheet"])
 
         path.parent.mkdir(parents=True, exist_ok=True)
         wb.save(path)
@@ -114,11 +118,12 @@ class XLSXWriter:
             features: List of feature summaries to write.
         """
         ws: Worksheet = wb.create_sheet("Summary")
-        ws.append(_SUMMARY_HEADERS)
+        XLSXWriter._append(ws, _SUMMARY_HEADERS)
         XLSXWriter._style_header(ws, len(_SUMMARY_HEADERS))
 
         for feature in features:
-            ws.append(
+            XLSXWriter._append(
+                ws,
                 [
                     feature.feature_name,
                     ";".join(feature.tags),
@@ -129,7 +134,7 @@ class XLSXWriter:
                     feature.undefined,
                     f"{feature.pass_rate:.1f}%",
                     format_duration(feature.duration),
-                ]
+                ],
             )
 
         if len(features) > 0:
@@ -153,7 +158,7 @@ class XLSXWriter:
             only_failed: When ``True``, only failed scenarios are included.
         """
         ws: Worksheet = wb.create_sheet("Details")
-        ws.append(columns)
+        XLSXWriter._append(ws, list(columns))
         XLSXWriter._style_header(ws, len(columns))
 
         status_col = columns.index("status") + 1 if "status" in columns else 0
@@ -163,7 +168,7 @@ class XLSXWriter:
             if only_failed and scenario.status != STATUS_FAILED:
                 continue
             row = XLSXWriter._scenario_row(scenario, columns)
-            ws.append(row)
+            XLSXWriter._append(ws, row)
 
             if status_col > 0:
                 fill = XLSXWriter._status_fill(scenario.status)
@@ -186,13 +191,14 @@ class XLSXWriter:
             scenarios: List of scenario results to filter.
         """
         ws: Worksheet = wb.create_sheet("Failures")
-        ws.append(_FAILURES_HEADERS)
+        XLSXWriter._append(ws, _FAILURES_HEADERS)
         XLSXWriter._style_header(ws, len(_FAILURES_HEADERS))
 
         for scenario in scenarios:
             if scenario.status != STATUS_FAILED:
                 continue
-            ws.append(
+            XLSXWriter._append(
+                ws,
                 [
                     scenario.feature_name,
                     scenario.scenario_name,
@@ -201,7 +207,7 @@ class XLSXWriter:
                     scenario.traceback,
                     scenario.file,
                     scenario.line,
-                ]
+                ],
             )
 
         failed_count = sum(1 for s in scenarios if s.status == STATUS_FAILED)
@@ -219,11 +225,12 @@ class XLSXWriter:
             trends: List of historical run entries.
         """
         ws: Worksheet = wb.create_sheet("Trends")
-        ws.append(_TRENDS_HEADERS)
+        XLSXWriter._append(ws, _TRENDS_HEADERS)
         XLSXWriter._style_header(ws, len(_TRENDS_HEADERS))
 
         for entry in trends:
-            ws.append(
+            XLSXWriter._append(
+                ws,
                 [
                     entry.timestamp,
                     f"{entry.pass_rate:.1f}%",
@@ -234,12 +241,30 @@ class XLSXWriter:
                     entry.skipped,
                     entry.undefined,
                     format_duration(entry.duration),
-                ]
+                ],
             )
 
         ws.auto_filter.ref = ws.dimensions
         ws.freeze_panes = "A2"
         XLSXWriter._auto_width(ws)
+
+    @staticmethod
+    def _append(ws: Worksheet, values: Sequence[object]) -> None:
+        """Append a row, keeping every string cell stored as literal text.
+
+        Strings are stripped of XML-illegal characters (openpyxl raises
+        ``IllegalCharacterError`` otherwise) and strings starting with
+        ``=`` are forced back to text so user content — e.g. a scenario
+        named ``=1+1`` — is never stored as a spreadsheet formula.
+
+        Args:
+            ws: The worksheet to append to.
+            values: Row values; non-strings are passed through unchanged.
+        """
+        ws.append([sanitize_xml_text(v) if isinstance(v, str) else v for v in values])
+        for cell in ws[ws.max_row]:
+            if cell.data_type == "f":
+                cell.data_type = "s"
 
     @staticmethod
     def _scenario_row(scenario: ScenarioResult, columns: list[str]) -> list[str]:

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import math
 import os
 from dataclasses import asdict
 from pathlib import Path
@@ -28,10 +29,14 @@ class History:
         ValueError: If ``max_entries`` is less than 1.
     """
 
-    def __init__(self, path: Path | None = None, max_entries: int = 100) -> None:
+    def __init__(self, path: Path | str | None = None, max_entries: int = 100) -> None:
+        try:
+            max_entries = int(max_entries)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"max_entries must be an integer, got {max_entries!r}") from exc
         if max_entries < 1:
             raise ValueError(f"max_entries must be >= 1, got {max_entries}")
-        self._path = path if path is not None else Path(".behave-sheets-history.json")
+        self._path = Path(path) if path is not None else Path(".behave-sheets-history.json")
         self._max_entries = max_entries
 
     def append(self, run_summary: RunSummary) -> list[HistoryEntry]:
@@ -65,7 +70,7 @@ class History:
         """
         try:
             raw = self._path.read_text(encoding="utf-8")
-        except OSError:
+        except (OSError, UnicodeDecodeError):
             return []
         if not raw.strip():
             return []
@@ -115,15 +120,16 @@ class History:
             OSError: If the atomic replace fails.
         """
         tmp_path = self._path.with_suffix(self._path.suffix + ".tmp")
-        self._path.parent.mkdir(parents=True, exist_ok=True)
         try:
+            self._path.parent.mkdir(parents=True, exist_ok=True)
             tmp_path.write_text(self._serialize(data), encoding="utf-8")
-        except PermissionError as exc:
-            raise PermissionError(f"Cannot write history file {self._path}: {exc}") from exc
-        try:
             os.replace(tmp_path, self._path)
+        except PermissionError as exc:
+            with contextlib.suppress(OSError):
+                tmp_path.unlink()
+            raise PermissionError(f"Cannot write history file {self._path}: {exc}") from exc
         except OSError:
-            with contextlib.suppress(FileNotFoundError):
+            with contextlib.suppress(OSError):
                 tmp_path.unlink()
             raise
 
@@ -159,18 +165,25 @@ class History:
             if not isinstance(item, dict):
                 continue
             try:
+                pass_rate = float(item.get("pass_rate", 0.0))
+                duration = float(item.get("duration", 0.0))
+            except (TypeError, ValueError):
+                continue
+            if not (math.isfinite(pass_rate) and math.isfinite(duration)):
+                continue
+            try:
                 entries.append(
                     HistoryEntry(
                         run_id=str(item.get("run_id", "")),
                         timestamp=str(item.get("timestamp", "")),
-                        total_features=int(item.get("total_features", 0)),
-                        total_scenarios=int(item.get("total_scenarios", 0)),
-                        passed=int(item.get("passed", 0)),
-                        failed=int(item.get("failed", 0)),
-                        skipped=int(item.get("skipped", 0)),
-                        undefined=int(item.get("undefined", 0)),
-                        pass_rate=float(item.get("pass_rate", 0.0)),
-                        duration=float(item.get("duration", 0.0)),
+                        total_features=max(0, int(item.get("total_features", 0))),
+                        total_scenarios=max(0, int(item.get("total_scenarios", 0))),
+                        passed=max(0, int(item.get("passed", 0))),
+                        failed=max(0, int(item.get("failed", 0))),
+                        skipped=max(0, int(item.get("skipped", 0))),
+                        undefined=max(0, int(item.get("undefined", 0))),
+                        pass_rate=min(100.0, max(0.0, pass_rate)),
+                        duration=max(0.0, duration),
                     )
                 )
             except (TypeError, ValueError):

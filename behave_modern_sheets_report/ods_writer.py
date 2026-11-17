@@ -17,7 +17,7 @@ from odf.style import Style, TableCellProperties, TextProperties
 from odf.table import Table, TableCell, TableRow
 from odf.text import P
 
-from .csv_writer import scenario_cell_value
+from .csv_writer import scenario_cell_value, validate_columns
 from .models import FeatureSummary, HistoryEntry, RunSummary, ScenarioResult
 from .utils import (
     DEFAULT_COLUMNS,
@@ -25,6 +25,7 @@ from .utils import (
     STATUS_PASSED,
     STATUS_SKIPPED,
     format_duration,
+    sanitize_xml_text,
 )
 
 _SUMMARY_HEADERS = [
@@ -70,7 +71,7 @@ class ODSWriter:
     @staticmethod
     def write(
         run_summary: RunSummary,
-        path: Path,
+        path: Path | str,
         columns: list[str] | None = None,
         only_failed: bool = False,
         trends: list[HistoryEntry] | None = None,
@@ -88,7 +89,9 @@ class ODSWriter:
             trends: Historical run entries for the Trends sheet.  When
                 ``None`` or empty, the Trends sheet is omitted.
         """
+        path = Path(path)
         cols = columns if columns is not None else DEFAULT_COLUMNS
+        validate_columns(cols)
         doc = OpenDocumentSpreadsheet()
 
         bold_style = ODSWriter._create_bold_style(doc)
@@ -130,19 +133,18 @@ class ODSWriter:
 
         for feature in features:
             row = TableRow()
-            values = [
-                feature.feature_name,
-                ";".join(feature.tags),
-                str(feature.total_scenarios),
-                str(feature.passed),
-                str(feature.failed),
-                str(feature.skipped),
-                str(feature.undefined),
-                f"{feature.pass_rate:.1f}%",
-                format_duration(feature.duration),
-            ]
-            for value in values:
-                row.addElement(ODSWriter._text_cell(value))
+            row.addElement(ODSWriter._text_cell(feature.feature_name))
+            row.addElement(ODSWriter._text_cell(";".join(feature.tags)))
+            for count in (
+                feature.total_scenarios,
+                feature.passed,
+                feature.failed,
+                feature.skipped,
+                feature.undefined,
+            ):
+                row.addElement(ODSWriter._number_cell(count))
+            row.addElement(ODSWriter._text_cell(f"{feature.pass_rate:.1f}%"))
+            row.addElement(ODSWriter._text_cell(format_duration(feature.duration)))
             table.addElement(row)
 
         doc.spreadsheet.addElement(table)
@@ -234,19 +236,18 @@ class ODSWriter:
 
         for entry in trends:
             row = TableRow()
-            values = [
-                entry.timestamp,
-                f"{entry.pass_rate:.1f}%",
-                str(entry.total_features),
-                str(entry.total_scenarios),
-                str(entry.passed),
-                str(entry.failed),
-                str(entry.skipped),
-                str(entry.undefined),
-                format_duration(entry.duration),
-            ]
-            for value in values:
-                row.addElement(ODSWriter._text_cell(value))
+            row.addElement(ODSWriter._text_cell(entry.timestamp))
+            row.addElement(ODSWriter._text_cell(f"{entry.pass_rate:.1f}%"))
+            for count in (
+                entry.total_features,
+                entry.total_scenarios,
+                entry.passed,
+                entry.failed,
+                entry.skipped,
+                entry.undefined,
+            ):
+                row.addElement(ODSWriter._number_cell(count))
+            row.addElement(ODSWriter._text_cell(format_duration(entry.duration)))
             table.addElement(row)
 
         doc.spreadsheet.addElement(table)
@@ -280,7 +281,7 @@ class ODSWriter:
         if style_name is not None:
             attrs["stylename"] = style_name
         cell = TableCell(**attrs)
-        cell.addElement(P(text=value))
+        cell.addElement(P(text=sanitize_xml_text(value)))
         return cell
 
     @staticmethod
@@ -320,7 +321,7 @@ class ODSWriter:
         Returns:
             The name of the registered style.
         """
-        style = Style(name="BoldHeader")
+        style = Style(name="BoldHeader", family="table-cell")
         style.addElement(TextProperties(fontweight="bold"))
         doc.styles.addElement(style)
         return "BoldHeader"
@@ -342,7 +343,7 @@ class ODSWriter:
             The name of the registered style.
         """
         name = f"Status_{bg_color}"
-        style = Style(name=name)
+        style = Style(name=name, family="table-cell")
         props = TableCellProperties(backgroundcolor=f"#{bg_color}")
         style.addElement(props)
         if bold:

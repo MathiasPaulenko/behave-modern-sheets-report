@@ -374,3 +374,57 @@ class TestStatusStyles:
         doc = OpenDocumentSpreadsheet()
         name = ODSWriter._create_status_style(doc, "DDFFDD", bold=False)
         assert name == "Status_DDFFDD"
+
+
+class TestIllegalXmlCharsOds:
+    """Regression: XML-illegal control chars must not corrupt the file."""
+
+    def test_control_chars_sanitized(self, tmp_path: Path) -> None:
+        path = tmp_path / "report.ods"
+        scenario = _make_scenario(scenario_name="bad\x0bname")
+        ODSWriter.write(_make_run_summary(scenarios=[scenario]), path)
+
+        doc = load(str(path))
+        assert doc is not None
+
+
+class TestInvalidColumnsOds:
+    """Regression: unknown columns raise KeyError before writing."""
+
+    def test_unknown_column_raises(self, tmp_path: Path) -> None:
+        import pytest
+
+        path = tmp_path / "report.ods"
+        with pytest.raises(KeyError):
+            ODSWriter.write(
+                _make_run_summary(scenarios=[_make_scenario()]),
+                path,
+                columns=["scenario", "bogus"],
+            )
+        assert not path.exists()
+
+
+class TestStringPathOds:
+    """Regression: write() accepts str paths, not only Path objects."""
+
+    def test_str_path(self, tmp_path: Path) -> None:
+        path = str(tmp_path / "report.ods")
+        ODSWriter.write(_make_run_summary(scenarios=[_make_scenario()]), path)
+        assert Path(path).exists()
+
+
+class TestNumericCells:
+    """Regression: counts must be numeric cells, matching XLSX output."""
+
+    def test_summary_counts_are_float_cells(self, tmp_path: Path) -> None:
+        path = tmp_path / "report.ods"
+        ODSWriter.write(
+            _make_run_summary(features=[_make_feature()], scenarios=[_make_scenario()]),
+            path,
+        )
+        doc = load(str(path))
+        tables = {t.getAttribute("name"): t for t in doc.spreadsheet.getElementsByType(Table)}
+        cells = tables["Summary"].getElementsByType(TableRow)[1].getElementsByType(TableCell)
+        valuetypes = [c.getAttribute("valuetype") for c in cells]
+        assert valuetypes[2] == "float"
+        assert valuetypes[3] == "float"

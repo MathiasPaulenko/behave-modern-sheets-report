@@ -19,6 +19,7 @@ from .utils import (
     STATUS_PASSED,
     STATUS_SKIPPED,
     STATUS_UNDEFINED,
+    STATUS_UNTESTED,
     generate_id,
     monotonic_seconds,
     normalize_status,
@@ -59,6 +60,8 @@ class Collector:
         self._scenario_start: float | None = None
         self._pending_steps: list[Any] = []
         self._bg_step_ids: set[int] = set()
+        self._seen_step_ids: set[int] = set()
+        self._scenario_all_steps: list[Any] = []
 
     # ------------------------------------------------------------------
     # Feature lifecycle
@@ -153,6 +156,12 @@ class Collector:
         bg_steps = getattr(behave_scenario, "background_steps", None) or []
         self._bg_step_ids = {id(step) for step in bg_steps}
         self._pending_steps = []
+        self._seen_step_ids = set()
+        # Behave < 1.3 emits no step/result events for steps skipped after a
+        # failure; the scenario model is the only place they exist. Captured
+        # here so end_scenario() can account for steps that never produced
+        # events on any Behave version.
+        self._scenario_all_steps = list(getattr(behave_scenario, "all_steps", None) or [])
 
         scenario = ScenarioResult(
             feature_name=feature_name,
@@ -182,7 +191,12 @@ class Collector:
         for pending_step in self._pending_steps:
             self._record_step(scenario, pending_step, executed=False)
         self._pending_steps.clear()
+        for model_step in self._scenario_all_steps:
+            if id(model_step) not in self._seen_step_ids:
+                self._record_step(scenario, model_step, executed=False)
+        self._scenario_all_steps = []
         self._bg_step_ids.clear()
+        self._seen_step_ids.clear()
         assert self._scenario_start is not None
         scenario.duration = monotonic_seconds(self._scenario_start)
         scenario.status = self._derive_scenario_status(scenario)
@@ -249,7 +263,9 @@ class Collector:
         raw_status = getattr(behave_step, "status", "")
         if hasattr(raw_status, "name"):
             raw_status = raw_status.name
-        status = self._map_status(safe_str(raw_status))
+        raw_str = safe_str(raw_status)
+        status = self._map_status(raw_str)
+        self._seen_step_ids.add(id(behave_step))
         scenario.step_count += 1
         if executed and id(behave_step) in self._bg_step_ids:
             scenario.background_steps += 1
@@ -268,6 +284,10 @@ class Collector:
                 scenario.traceback = traceback_str
         elif status == STATUS_SKIPPED:
             scenario.skipped_steps += 1
+        elif status == STATUS_UNTESTED and raw_str.lower() == STATUS_UNTESTED:
+            # Only an explicit "untested" status counts — unrecognized values
+            # also normalize to untested but must surface as undefined.
+            scenario.untested_steps += 1
 
     # ------------------------------------------------------------------
     # Finalization
@@ -345,8 +365,10 @@ class Collector:
 
         Returns:
             ``STATUS_FAILED`` if any step failed, ``STATUS_SKIPPED`` if all
-            steps were skipped, ``STATUS_UNDEFINED`` if any step is undefined,
-            ``STATUS_PASSED`` otherwise.
+            steps were skipped, ``STATUS_UNTESTED`` if all steps were left
+            untested (dry runs), ``STATUS_UNDEFINED`` if any step is
+            undefined or only partially accounted for, ``STATUS_PASSED``
+            otherwise.
         """
         if scenario.failed_steps > 0:
             return STATUS_FAILED
@@ -354,8 +376,15 @@ class Collector:
             return STATUS_SKIPPED
         if scenario.skipped_steps == scenario.step_count:
             return STATUS_SKIPPED
-        accounted = scenario.passed_steps + scenario.failed_steps + scenario.skipped_steps
-        if accounted < scenario.step_count:
+        if scenario.untested_steps == scenario.step_count:
+            return STATUS_UNTESTED
+        accounted = (
+            scenario.passed_steps
+            + scenario.failed_steps
+            + scenario.skipped_steps
+            + scenario.untested_steps
+        )
+        if accounted < scenario.step_count or scenario.untested_steps > 0:
             return STATUS_UNDEFINED
         return STATUS_PASSED
 
@@ -400,7 +429,10 @@ class Collector:
         if isinstance(exc, BaseException):
             import traceback as tb_mod
 
-            tb_str = "".join(tb_mod.format_exception(type(exc), exc, exc.__traceback__))
+            exc_tb = getattr(behave_step, "exc_traceback", None)
+            if exc_tb is None:
+                exc_tb = exc.__traceback__
+            tb_str = "".join(tb_mod.format_exception(type(exc), exc, exc_tb))
             if len(tb_str) > 500:
                 tb_str = tb_str[:497] + "..."
             return safe_str(exc), type(exc).__name__, tb_str

@@ -393,3 +393,26 @@ class TestDoubleCloseNoDuplicateHistory:
 
         data = json.loads(history_path.read_text(encoding="utf-8"))
         assert len(data) == 1
+
+
+class TestHistoryFailure:
+    """Regression: a broken history file must not prevent the report."""
+
+    def test_history_write_failure_still_writes_report(self, tmp_path: Path) -> None:
+        import pytest
+
+        bad_history = tmp_path / "history_dir"
+        bad_history.mkdir()
+        output = tmp_path / "report.xlsx"
+        fmt = XLSXFormatter(
+            _StreamOpener(name=str(output)),
+            _make_config({"report_history_path": str(bad_history)}),
+        )
+        feature = _make_feature("Login")
+        scenario = _make_scenario("S1")
+        step = _make_step("passed")
+
+        with pytest.warns(RuntimeWarning, match="Could not persist run history"):
+            _run_full_cycle(fmt, feature, [(scenario, [(step, step)])])
+
+        assert output.exists()

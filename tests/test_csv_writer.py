@@ -319,3 +319,16 @@ class TestColumnMap:
             assert hasattr(scenario, field_name), (
                 f"Missing field {field_name} for column {col_name}"
             )
+
+
+class TestInvalidColumns:
+    """Regression: unknown columns must fail before writing the header."""
+
+    def test_unknown_column_raises_before_any_output(self) -> None:
+        import pytest
+
+        stream = StringIO()
+        run = RunSummary(scenarios=[_make_scenario()])
+        with pytest.raises(KeyError):
+            CSVWriter.write(run, stream, columns=["scenario", "bogus"])
+        assert stream.getvalue() == ""

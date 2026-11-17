@@ -501,3 +501,102 @@ class TestEdgeCases:
         width = ws.column_dimensions[total_col_letter].width
         assert width >= 3
         wb.close()
+
+
+class TestFormulaInjection:
+    """Regression: strings starting with '=' must be stored as text."""
+
+    def test_equals_string_stored_as_text(self, tmp_path: Path) -> None:
+        path = tmp_path / "report.xlsx"
+        scenario = _make_scenario(scenario_name="=1+1")
+        XLSXWriter.write(_make_run_summary(scenarios=[scenario]), path)
+
+        wb = load_workbook(path)
+        cell = wb["Details"].cell(row=2, column=2)
+        assert cell.data_type == "s"
+        assert cell.value == "=1+1"
+        wb.close()
+
+    def test_feature_name_equals_string_stored_as_text(self, tmp_path: Path) -> None:
+        path = tmp_path / "report.xlsx"
+        feature = _make_feature(name="=cmd|'/c calc'!A0")
+        XLSXWriter.write(_make_run_summary(features=[feature], scenarios=[_make_scenario()]), path)
+
+        wb = load_workbook(path)
+        cell = wb["Summary"].cell(row=2, column=1)
+        assert cell.data_type == "s"
+        assert cell.value == "=cmd|'/c calc'!A0"
+        wb.close()
+
+
+class TestIllegalXmlChars:
+    """Regression: XML-illegal control chars must not crash the writer."""
+
+    def test_control_chars_sanitized(self, tmp_path: Path) -> None:
+        path = tmp_path / "report.xlsx"
+        scenario = _make_scenario(scenario_name="bad\x0bname")
+        XLSXWriter.write(_make_run_summary(scenarios=[scenario]), path)
+
+        wb = load_workbook(path)
+        assert wb["Details"].cell(row=2, column=2).value == "badname"
+        wb.close()
+
+    def test_illegal_chars_in_tags_and_errors(self, tmp_path: Path) -> None:
+        path = tmp_path / "report.xlsx"
+        scenario = _make_scenario(
+            status="failed",
+            error_message="boom\x1f",
+            traceback="trace\x00back",
+        )
+        XLSXWriter.write(_make_run_summary(scenarios=[scenario]), path)
+
+        wb = load_workbook(path)
+        assert wb["Failures"].cell(row=2, column=3).value == "boom"
+        wb.close()
+
+
+class TestInvalidColumnsXlsx:
+    """Regression: unknown columns raise KeyError before writing."""
+
+    def test_unknown_column_raises(self, tmp_path: Path) -> None:
+        import pytest
+
+        path = tmp_path / "report.xlsx"
+        with pytest.raises(KeyError):
+            XLSXWriter.write(
+                _make_run_summary(scenarios=[_make_scenario()]),
+                path,
+                columns=["scenario", "bogus"],
+            )
+        assert not path.exists()
+
+
+class TestDefaultSheetGuard:
+    """Regression: missing default 'Sheet' must not raise KeyError."""
+
+    def test_no_default_sheet_named_sheet(self, tmp_path: Path, monkeypatch) -> None:
+        from openpyxl import Workbook
+
+        from behave_modern_sheets_report import xlsx_writer
+
+        class RenamedWorkbook(Workbook):
+            def __init__(self) -> None:
+                super().__init__()
+                self.active.title = "NotSheet"
+
+        monkeypatch.setattr(xlsx_writer, "Workbook", RenamedWorkbook)
+        path = tmp_path / "report.xlsx"
+        XLSXWriter.write(_make_run_summary(scenarios=[_make_scenario()]), path)
+
+        wb = load_workbook(path)
+        assert "Details" in wb.sheetnames
+        wb.close()
+
+
+class TestStringPathXlsx:
+    """Regression: write() accepts str paths, not only Path objects."""
+
+    def test_str_path(self, tmp_path: Path) -> None:
+        path = str(tmp_path / "report.xlsx")
+        XLSXWriter.write(_make_run_summary(scenarios=[_make_scenario()]), path)
+        assert Path(path).exists()

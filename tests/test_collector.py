@@ -1039,3 +1039,146 @@ class TestDeriveScenarioStatusZeroSteps:
 
         assert rs.scenarios[0].status == STATUS_SKIPPED
         assert rs.skipped == 1
+
+
+class TestUntestedStatus:
+    """Regression: dry-run scenarios must report 'untested', not 'undefined'."""
+
+    def test_all_untested_steps_scenario_untested(self) -> None:
+        c = Collector()
+        c.start_feature(make_feature("F"))
+        c.start_scenario(make_scenario("S"))
+        s1 = make_step("untested")
+        s2 = make_step("untested")
+        c.start_step(s1)
+        c.start_step(s2)
+        c.end_step(s1)
+        c.end_step(s2)
+        c.end_scenario()
+        rs = c.finalize()
+
+        assert rs.scenarios[0].status == "untested"
+        assert rs.scenarios[0].untested_steps == 2
+
+    def test_mixed_untested_and_skipped_is_undefined(self) -> None:
+        c = Collector()
+        c.start_feature(make_feature("F"))
+        c.start_scenario(make_scenario("S"))
+        s1 = make_step("untested")
+        s2 = make_step("skipped")
+        c.start_step(s1)
+        c.start_step(s2)
+        c.end_step(s1)
+        c.end_step(s2)
+        c.end_scenario()
+        rs = c.finalize()
+
+        assert rs.scenarios[0].status == STATUS_UNDEFINED
+
+    def test_garbage_status_is_undefined_not_untested(self) -> None:
+        c = Collector()
+        c.start_feature(make_feature("F"))
+        c.start_scenario(make_scenario("S"))
+        s1 = make_step(12345)
+        c.start_step(s1)
+        c.end_step(s1)
+        c.end_scenario()
+        rs = c.finalize()
+
+        assert rs.scenarios[0].status == STATUS_UNDEFINED
+        assert rs.scenarios[0].untested_steps == 0
+
+
+class TestExcTraceback:
+    """Regression: prefer the step's own exc_traceback over exc.__traceback__."""
+
+    def _raise(self) -> BaseException:
+        try:
+            raise ValueError("boom")
+        except ValueError as exc:
+            return exc
+        raise AssertionError("unreachable")
+
+    def test_step_exc_traceback_used(self) -> None:
+        import sys
+
+        try:
+            raise ValueError("boom")
+        except ValueError:
+            _, exc, tb = sys.exc_info()
+        step = SimpleNamespace(
+            name="s", status="failed", error=exc, exc_traceback=tb, table=None, text=None
+        )
+        c = Collector()
+        c.start_feature(make_feature("F"))
+        c.start_scenario(make_scenario("S"))
+        c.start_step(step)
+        c.end_step(step)
+        c.end_scenario()
+        rs = c.finalize()
+
+        assert "ValueError" in rs.scenarios[0].traceback
+
+    def test_falls_back_to_exception_traceback(self) -> None:
+        exc: BaseException | None = None
+        try:
+            raise RuntimeError("bang")
+        except RuntimeError as caught:
+            exc = caught
+        step = SimpleNamespace(name="s", status="failed", error=exc, table=None, text=None)
+        c = Collector()
+        c.start_feature(make_feature("F"))
+        c.start_scenario(make_scenario("S"))
+        c.start_step(step)
+        c.end_step(step)
+        c.end_scenario()
+        rs = c.finalize()
+
+        assert "RuntimeError" in rs.scenarios[0].traceback
+
+
+class TestBehave126Compatibility:
+    """Regression: steps with no events (Behave < 1.3 skip path) are counted."""
+
+    def test_skipped_steps_only_in_model_counted(self) -> None:
+        executed = make_step("passed")
+        skipped_a = make_step("skipped")
+        skipped_b = make_step("skipped")
+        scenario = make_scenario("S")
+        scenario.all_steps = [executed, skipped_a, skipped_b]
+
+        c = Collector()
+        c.start_feature(make_feature("F"))
+        c.start_scenario(scenario)
+        # Behave 1.2.6 protocol: step/result alternate, only for executed steps.
+        c.start_step(executed)
+        c.end_step(executed)
+        c.end_scenario()
+        rs = c.finalize()
+
+        result = rs.scenarios[0]
+        assert result.step_count == 3
+        assert result.passed_steps == 1
+        assert result.skipped_steps == 2
+        assert result.status == STATUS_PASSED
+
+    def test_model_steps_not_double_counted_13_protocol(self) -> None:
+        s1 = make_step("passed")
+        s2 = make_step("skipped")
+        scenario = make_scenario("S")
+        scenario.all_steps = [s1, s2]
+
+        c = Collector()
+        c.start_feature(make_feature("F"))
+        c.start_scenario(scenario)
+        # Behave 1.3 protocol: all steps announced upfront.
+        c.start_step(s1)
+        c.start_step(s2)
+        c.end_step(s1)
+        c.end_scenario()
+        rs = c.finalize()
+
+        result = rs.scenarios[0]
+        assert result.step_count == 2
+        assert result.passed_steps == 1
+        assert result.skipped_steps == 1

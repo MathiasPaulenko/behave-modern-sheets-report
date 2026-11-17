@@ -23,6 +23,7 @@ from behave_modern_sheets_report.utils import (
     parse_delimiter,
     safe_str,
     safe_tags,
+    sanitize_xml_text,
 )
 
 
@@ -332,3 +333,61 @@ class TestColumnMapSync:
         """Every column in DEFAULT_COLUMNS must be in VALID_COLUMNS."""
         for col in DEFAULT_COLUMNS:
             assert col in VALID_COLUMNS, f"DEFAULT_COLUMN {col!r} not in VALID_COLUMNS"
+
+
+class TestNonStringInputs:
+    """Regression: parsers must not crash on non-string userdata values."""
+
+    def test_parse_bool_bool(self) -> None:
+        assert parse_bool(True) is True
+        assert parse_bool(False) is False
+
+    def test_parse_bool_int(self) -> None:
+        assert parse_bool(1) is True
+        assert parse_bool(0) is False
+
+    def test_parse_delimiter_non_string(self) -> None:
+        assert parse_delimiter(5) == ","
+        assert parse_delimiter(["tab"]) == ","
+
+    def test_parse_columns_non_string(self) -> None:
+        assert parse_columns(5) == DEFAULT_COLUMNS
+        assert parse_columns(["feature"]) == DEFAULT_COLUMNS
+
+    def test_normalize_status_non_string(self) -> None:
+        assert normalize_status(12345) == STATUS_UNTESTED
+        assert normalize_status(["passed"]) == STATUS_UNTESTED
+
+
+class TestSanitizeXmlText:
+    """Tests for sanitize_xml_text."""
+
+    def test_clean_string_unchanged(self) -> None:
+        assert sanitize_xml_text("hello world") == "hello world"
+
+    def test_control_char_removed(self) -> None:
+        assert sanitize_xml_text("bad\x0bname") == "badname"
+
+    def test_all_illegal_ranges_removed(self) -> None:
+        value = "a\x00b\x07c\x0bd\x0ce\x0ef\x1fg"
+        assert sanitize_xml_text(value) == "abcdefg"
+
+    def test_legal_whitespace_kept(self) -> None:
+        assert sanitize_xml_text("a\tb\nc\rd") == "a\tb\nc\rd"
+
+    def test_unicode_kept(self) -> None:
+        assert sanitize_xml_text("emoji 🚀 café") == "emoji 🚀 café"
+
+
+class TestBrokenStr:
+    """Regression: safe_str/safe_tags survive objects with broken __str__."""
+
+    class _BrokenStr:
+        def __str__(self) -> str:
+            raise RuntimeError("cannot stringify")
+
+    def test_safe_str_broken_object(self) -> None:
+        assert safe_str(self._BrokenStr()) == ""
+
+    def test_safe_tags_broken_item_dropped(self) -> None:
+        assert safe_tags([self._BrokenStr(), "ok"]) == ["ok"]

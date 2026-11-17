@@ -29,6 +29,7 @@ class ScenarioResult:
         passed_steps: Number of steps that passed.
         failed_steps: Number of steps that failed.
         skipped_steps: Number of steps that were skipped.
+        untested_steps: Number of steps left untested (dry runs).
         file: Feature file path.
         line: Line number of the scenario in the feature file.
         rule: Gherkin rule name if the scenario belongs to a rule, empty otherwise.
@@ -51,6 +52,7 @@ class ScenarioResult:
     passed_steps: int = 0
     failed_steps: int = 0
     skipped_steps: int = 0
+    untested_steps: int = 0
     file: str = ""
     line: int = 0
     rule: str = ""
